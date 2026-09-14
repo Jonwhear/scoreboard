@@ -1,0 +1,30 @@
+[project]
+name = "sports-scoreboard"
+version = "1.0.0"
+description = "Local sports scoreboard for a Raspberry Pi driving chained HUB75 LED matrices"
+requires-python = ">=3.9"
+dependencies = [
+    "Flask>=3.0,<4",
+    "requests>=2.31,<3",
+    "Pillow>=10.0",
+    "waitress>=3.0,<4",
+]
+
+[project.optional-dependencies]
+dev = ["pytest>=8.0"]
+
+[project.scripts]
+sports-scoreboard = "scoreboard.app:main"
+
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+include = ["scoreboard*"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["."]
+addopts = "-q"
+filterwarnings = ["error::DeprecationWarning:scoreboard.*"]

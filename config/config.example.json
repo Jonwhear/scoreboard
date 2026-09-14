@@ -1,0 +1,49 @@
+{
+  "display": {
+    "rows": 32,
+    "cols": 64,
+    "chain_length": 3,
+    "parallel": 1,
+    "gpio_mapping": "adafruit-hat",
+    "slowdown_gpio": 4,
+    "brightness": 50,
+    "pwm_bits": 11,
+    "pwm_lsb_nanoseconds": 130,
+    "limit_refresh_rate_hz": 0,
+    "disable_hardware_pulsing": true,
+    "show_logos": true,
+    "run_as_user": ""
+  },
+  "sports": {
+    "enabled_leagues": ["nfl", "mlb", "nhl", "nba"],
+    "favorite_teams": []
+  },
+  "rotation": {
+    "screen_seconds": 8,
+    "favorites_only": false,
+    "show_nonfavorite_live": true,
+    "show_recent_finals": true,
+    "show_upcoming": true,
+    "layout_mode": "auto",
+    "final_window_hours": 12,
+    "upcoming_window_hours": 36,
+    "max_screens": 12
+  },
+  "sleep": {
+    "enabled": false,
+    "start": "01:00",
+    "end": "07:00"
+  },
+  "polling": {
+    "favorite_live_seconds": 15,
+    "live_seconds": 25,
+    "idle_seconds": 180,
+    "min_interval_seconds": 10,
+    "http_timeout_seconds": 8.0,
+    "http_retries": 3
+  },
+  "web": {
+    "host": "0.0.0.0",
+    "port": 8080
+  }
+}

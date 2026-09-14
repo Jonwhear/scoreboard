@@ -1,0 +1,284 @@
+"""Display backends, font resolution and the render loop."""
+
+from __future__ import annotations
+
+import importlib.util
+import time
+
+import pytest
+from PIL import Image
+
+from scoreboard.config import ConfigStore, DisplayConfig
+from scoreboard.display.base import Display, NullDisplay
+from scoreboard.display.fonts import ROLES, FontRegistry
+from scoreboard.display.preview import PreviewDisplay, scale_nearest
+from scoreboard.models import LeagueSnapshot
+from scoreboard.runner import DisplayRunner
+from scoreboard.state import AppState
+
+
+def write_bdf(path, width=5, height=7):
+    """A minimal but valid BDF, standing in for rpi-rgb-led-matrix's fonts."""
+    lines = [
+        "STARTFONT 2.1",
+        "FONT -test-fixed-medium-r-normal--7-70-75-75-c-50-iso8859-1",
+        "SIZE 7 75 75",
+        f"FONTBOUNDINGBOX {width} {height} 0 -1",
+        "STARTPROPERTIES 2", "FONT_ASCENT 6", "FONT_DESCENT 1", "ENDPROPERTIES",
+    ]
+    codes = list(range(32, 127))
+    lines.append(f"CHARS {len(codes)}")
+    for code in codes:
+        rows = [f"{(0b11111 if (code + row) % 3 == 0 else 0b10001) << 3:02X}"
+                for row in range(height)]
+        lines += [f"STARTCHAR c{code}", f"ENCODING {code}", "SWIDTH 500 0",
+                  f"DWIDTH {width} 0", f"BBX {width} {height} 0 -1", "BITMAP"]
+        lines += rows + ["ENDCHAR"]
+    lines.append("ENDFONT")
+    with open(path, "w", encoding="ascii") as handle:
+        handle.write("\n".join(lines) + "\n")
+
+
+# -- fonts -----------------------------------------------------------------
+
+def test_bdf_fonts_are_preferred_when_present(tmp_path):
+    font_dir = tmp_path / "fonts"
+    font_dir.mkdir()
+    write_bdf(str(font_dir / "5x7.bdf"))
+    registry = FontRegistry(cache_dir=str(tmp_path / "cache"),
+                            search_dirs=[str(font_dir)])
+    font = registry.get("small")
+    assert font.source == "bdf:5x7.bdf"
+    assert font.height == 7
+    assert font.text_width("MIN") == 15
+
+
+def test_converted_bdf_is_cached_on_disk(tmp_path):
+    font_dir = tmp_path / "fonts"
+    font_dir.mkdir()
+    write_bdf(str(font_dir / "5x7.bdf"))
+    cache = tmp_path / "cache"
+    FontRegistry(cache_dir=str(cache), search_dirs=[str(font_dir)]).get("small")
+    assert (cache / "5x7.pil").exists()
+    # A second registry reuses the converted file rather than re-parsing.
+    assert FontRegistry(cache_dir=str(cache),
+                        search_dirs=[str(font_dir)]).get("small").height == 7
+
+
+def test_registry_falls_back_when_no_bdf_exists(tmp_path):
+    registry = FontRegistry(cache_dir=str(tmp_path), search_dirs=[str(tmp_path)])
+    font = registry.get("small")
+    assert font.source != ""
+    assert not font.source.startswith("bdf:")
+    assert font.height > 0 and font.text_width("MIN") > 0
+
+
+def test_every_role_resolves(fonts):
+    described = fonts.describe()
+    assert set(described) == set(ROLES)
+    assert all(source for source in described.values())
+
+
+def test_unknown_role_falls_back_to_small(fonts):
+    assert fonts.get("nonexistent").height == fonts.get("small").height
+
+
+def test_fonts_measure_and_truncate(fonts):
+    font = fonts.get("small")
+    assert font.text_width("") == 0
+    assert font.fit("", 10) == ""
+    assert font.text_width(font.fit("ABCDEFGHIJKL", 10)) <= 10
+    assert font.fit("AB", 1000) == "AB"
+
+
+# -- backends --------------------------------------------------------------
+
+def test_null_display_counts_frames():
+    display = NullDisplay(192, 32)
+    display.show(Image.new("RGB", (192, 32)))
+    assert display.frame_count == 1 and display.last_image is not None
+
+
+def test_display_resizes_a_mismatched_frame():
+    display = NullDisplay(192, 32)
+    display.show(Image.new("RGB", (64, 32)))
+    assert display.last_image.size == (192, 32)
+
+
+def test_preview_display_keeps_the_last_frame():
+    display = PreviewDisplay(DisplayConfig())
+    display.start()
+    assert display.image is None
+    frame = Image.new("RGB", (192, 32), (10, 20, 30))
+    display.show(frame)
+    assert display.image.size == (192, 32)
+    assert display.image.getpixel((0, 0)) == (10, 20, 30)
+    display.clear()
+    assert display.image.getpixel((0, 0)) == (0, 0, 0)
+
+
+def test_preview_display_writes_a_file(tmp_path):
+    target = tmp_path / "frame.png"
+    display = PreviewDisplay(DisplayConfig(), output_path=str(target))
+    display.show(Image.new("RGB", (192, 32), (255, 0, 0)))
+    assert target.exists()
+    assert Image.open(target).size == (192, 32)
+    assert not (tmp_path / "frame.png.tmp").exists(), "writes must be atomic"
+
+
+def test_preview_display_geometry_follows_config():
+    display = PreviewDisplay(DisplayConfig(chain_length=2))
+    assert (display.width, display.height) == (128, 32)
+
+
+def test_matrix_backend_reports_a_useful_error_without_hardware():
+    from scoreboard.display.matrix import MatrixDisplay, MatrixUnavailableError
+
+    if importlib.util.find_spec("rgbmatrix") is not None:
+        pytest.skip("rgbmatrix is installed; this test covers the absence case")
+
+    with pytest.raises(MatrixUnavailableError) as excinfo:
+        MatrixDisplay(DisplayConfig()).start()
+    assert "rgbmatrix" in str(excinfo.value)
+
+
+def test_matrix_display_declares_the_right_canvas():
+    from scoreboard.display.matrix import MatrixDisplay
+
+    display = MatrixDisplay(DisplayConfig(rows=32, cols=64, chain_length=3))
+    assert (display.width, display.height) == (192, 32)
+
+
+def test_scale_nearest_is_bounded():
+    image = Image.new("RGB", (192, 32))
+    assert scale_nearest(image, 1).size == (192, 32)
+    assert scale_nearest(image, 100).size == (192 * 20, 32 * 20)
+
+
+# -- the render loop -------------------------------------------------------
+
+class RecordingDisplay(Display):
+    backend_name = "recording"
+
+    def __init__(self, width=192, height=32):
+        super().__init__(width, height)
+        self.frames = []
+        self.brightness = None
+        self.cleared = 0
+
+    def show(self, image):
+        self.frames.append(image.copy())
+
+    def set_brightness(self, brightness):
+        self.brightness = brightness
+
+    def clear(self):
+        self.cleared += 1
+
+
+def make_runner(tmp_path, patch=None):
+    store = ConfigStore(str(tmp_path / "config.json"))
+    store.load()
+    if patch:
+        store.update(patch)
+    state = AppState()
+    display = RecordingDisplay()
+    runner = DisplayRunner(display, state, store,
+                           FontRegistry(cache_dir=str(tmp_path / "fonts")), logos=None)
+    return runner, display, state, store
+
+
+def test_runner_renders_frames_and_publishes_a_preview(tmp_path, nfl_games):
+    runner, display, state, _ = make_runner(tmp_path)
+    state.update_snapshot(LeagueSnapshot("nfl", games=nfl_games))
+    runner._tick(0.0)
+    assert display.frames and display.frames[-1].size == (192, 32)
+    assert state.frame_png is not None and state.frame_png.startswith(b"\x89PNG")
+    assert state.screen.layout in ("featured", "cards", "upcoming", "final", "idle")
+
+
+def test_runner_renders_idle_with_no_data(tmp_path):
+    runner, display, state, _ = make_runner(tmp_path)
+    runner._tick(0.0)
+    assert state.screen.layout == "idle"
+    assert display.frames
+
+
+def test_runner_applies_brightness_once_per_change(tmp_path):
+    runner, display, _, store = make_runner(tmp_path, {"display": {"brightness": 40}})
+    runner._tick(0.0)
+    assert display.brightness == 40
+    display.brightness = None
+    runner._tick(0.2)
+    assert display.brightness is None, "unchanged brightness should not be re-sent"
+    store.update({"display": {"brightness": 90}})
+    runner._tick(0.4)
+    assert display.brightness == 90
+
+
+def test_runner_blanks_the_display_while_asleep(tmp_path):
+    runner, display, state, _ = make_runner(
+        tmp_path, {"sleep": {"enabled": True, "start": "00:00", "end": "23:59"}})
+    runner._tick(0.0)
+    assert state.screen.kind == "sleep"
+    assert display.frames[-1].getextrema() == ((0, 0), (0, 0), (0, 0))
+
+
+def test_runner_force_next_advances(tmp_path, nfl_games):
+    runner, _, state, store = make_runner(
+        tmp_path, {"rotation": {"layout_mode": "featured", "screen_seconds": 999}})
+    state.update_snapshot(LeagueSnapshot("nfl", games=nfl_games))
+    runner._tick(0.0)
+    first = state.screen.title
+    runner.force_next()
+    runner._tick(0.2)
+    assert state.screen.title != first
+
+
+def test_runner_test_screens(tmp_path):
+    runner, _, state, _ = make_runner(tmp_path)
+    assert runner.show_test_screen("test_pattern", seconds=60) is True
+    runner._tick(0.0)
+    assert state.screen.kind == "test" and state.screen.layout == "test_pattern"
+
+    assert runner.show_test_screen("not-a-screen") is False
+
+    runner.clear_override()
+    runner._tick(0.2)
+    assert state.screen.kind != "test"
+
+
+def test_test_screen_expires(tmp_path):
+    runner, _, state, _ = make_runner(tmp_path)
+    runner.show_test_screen("clock", seconds=1)
+    runner._tick(time.monotonic())
+    assert state.screen.kind == "test"
+    runner._tick(time.monotonic() + 5)
+    assert state.screen.kind != "test"
+
+
+def test_runner_survives_a_display_that_throws(tmp_path):
+    class AngryDisplay(RecordingDisplay):
+        def show(self, image):
+            raise RuntimeError("panel fell off")
+
+    store = ConfigStore(str(tmp_path / "config.json"))
+    store.load()
+    runner = DisplayRunner(AngryDisplay(), AppState(), store,
+                           FontRegistry(cache_dir=str(tmp_path / "fonts")))
+    runner._tick(0.0)      # must not raise
+
+
+def test_runner_thread_starts_and_stops_cleanly(tmp_path):
+    runner, display, _, _ = make_runner(tmp_path)
+    runner.start()
+    try:
+        deadline = time.time() + 3
+        while not display.frames and time.time() < deadline:
+            time.sleep(0.05)
+        assert display.frames, "the loop should have drawn something"
+    finally:
+        runner.stop()
+        runner.join(timeout=5)
+    assert not runner.is_alive()
+    assert display.cleared >= 1

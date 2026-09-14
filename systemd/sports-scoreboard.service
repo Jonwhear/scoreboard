@@ -1,0 +1,44 @@
+# Sports scoreboard service.
+#
+# Installed by scripts/install.sh, which substitutes __INSTALL_DIR__ and
+# __RUN_USER__ and writes the result to /etc/systemd/system/.
+#
+# The unit starts as root because rpi-rgb-led-matrix has to map /dev/mem and
+# request a real-time thread. The application drops to __RUN_USER__ as soon
+# as the matrix is initialized, so the web server, the HTTP client and every
+# file write run unprivileged. See the "Root and GPIO" section of README.md.
+
+[Unit]
+Description=Sports scoreboard on HUB75 LED matrix
+Documentation=file://__INSTALL_DIR__/README.md
+After=network-online.target time-sync.target
+Wants=network-online.target
+
+# Give up (leaving a clear failed state) after 5 restarts in 5 minutes, so a
+# broken install does not spin forever. These belong in [Unit], not [Service].
+StartLimitIntervalSec=300
+StartLimitBurst=5
+
+[Service]
+Type=simple
+User=root
+WorkingDirectory=__INSTALL_DIR__
+Environment=PYTHONUNBUFFERED=1
+ExecStart=__INSTALL_DIR__/.venv/bin/python -m scoreboard.app
+KillSignal=SIGTERM
+TimeoutStopSec=20
+
+# Come back from crashes, but not instantly (see StartLimit* in [Unit]).
+Restart=on-failure
+RestartSec=5
+
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=sports-scoreboard
+
+# The refresh thread benefits from scheduling priority; without it the panels
+# can shimmer when the Pi is busy.
+Nice=-5
+
+[Install]
+WantedBy=multi-user.target

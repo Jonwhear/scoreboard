@@ -1,0 +1,27 @@
+# Optional variant: no LED hardware, web UI only.
+#
+# Useful for trying the project on a machine with no matrix attached, or for
+# keeping the UI up while the panels are unplugged. Runs entirely as
+# __RUN_USER__ -- it never needs root.
+
+[Unit]
+Description=Sports scoreboard (preview mode, no LED hardware)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=__RUN_USER__
+WorkingDirectory=__INSTALL_DIR__
+Environment=PYTHONUNBUFFERED=1
+ExecStart=__INSTALL_DIR__/.venv/bin/python -m scoreboard.app --preview
+KillSignal=SIGTERM
+TimeoutStopSec=20
+Restart=on-failure
+RestartSec=5
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=sports-scoreboard
+
+[Install]
+WantedBy=multi-user.target

@@ -1,0 +1,12 @@
+# Runtime dependencies. Deliberately small.
+#
+# The rgbmatrix bindings are NOT listed here: they are built from the
+# rpi-rgb-led-matrix checkout that already exists on the Pi, and installing
+# them from PyPI would shadow that working build.
+Flask>=3.0,<4
+requests>=2.31,<3
+Pillow>=10.0
+waitress>=3.0,<4      # small production WSGI server; Flask's own is a fallback
+
+# Development / test
+pytest>=8.0

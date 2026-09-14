@@ -1,0 +1,142 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="color-scheme" content="dark light">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <title>Scoreboard</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='styles.css') }}">
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><text y='26' font-size='26'>🏟️</text></svg>">
+</head>
+<body>
+<header class="topbar">
+  <div class="topbar-inner">
+    <div class="brand">
+      <span class="brand-dot" id="health-dot" aria-hidden="true"></span>
+      <h1>Scoreboard</h1>
+    </div>
+    <div class="topbar-meta">
+      <span id="header-status" class="pill">connecting…</span>
+    </div>
+  </div>
+</header>
+
+<main>
+  <!-- PREVIEW ---------------------------------------------------------->
+  <section class="card" id="preview-card">
+    <div class="card-head">
+      <h2>Preview</h2>
+      <span class="hint" id="preview-meta">192 × 32</span>
+    </div>
+    <div class="preview-frame">
+      <img id="preview" alt="Live preview of the LED matrix framebuffer" decoding="async">
+      <div class="preview-empty" id="preview-empty">waiting for the first frame…</div>
+    </div>
+    <div class="button-row">
+      <button class="btn" data-action="next">Force next screen</button>
+      <button class="btn" data-action="refresh">Refresh data</button>
+      <button class="btn ghost" data-test="clock">Show clock</button>
+      <button class="btn ghost" data-test="sample_game">Sample game</button>
+      <button class="btn ghost" data-test="sample_cards">Sample cards</button>
+      <button class="btn ghost" data-test="test_pattern">Panel test</button>
+      <button class="btn ghost" data-test="clear">Back to live</button>
+    </div>
+  </section>
+
+  <!-- STATUS ----------------------------------------------------------->
+  <section class="card">
+    <div class="card-head"><h2>Status</h2></div>
+    <dl class="status-grid" id="status-grid"></dl>
+  </section>
+
+  <!-- FAVOURITES ------------------------------------------------------->
+  <section class="card">
+    <div class="card-head">
+      <h2>Favourite teams</h2>
+      <span class="hint" id="favorites-count"></span>
+    </div>
+    <div id="favorites-list" class="chips"></div>
+    <div class="team-picker">
+      <div class="field-row">
+        <label class="field">
+          <span>League</span>
+          <select id="team-league"></select>
+        </label>
+        <label class="field grow">
+          <span>Search teams</span>
+          <input id="team-search" type="search" placeholder="Type a team name…" autocomplete="off">
+        </label>
+      </div>
+      <ul id="team-results" class="team-results"></ul>
+    </div>
+  </section>
+
+  <!-- LEAGUES ---------------------------------------------------------->
+  <section class="card">
+    <div class="card-head">
+      <h2>Leagues</h2>
+      <span class="hint">Which leagues are polled</span>
+    </div>
+    <div id="league-toggles" class="toggle-grid"></div>
+  </section>
+
+  <!-- DISPLAY ---------------------------------------------------------->
+  <section class="card">
+    <div class="card-head"><h2>Display</h2></div>
+
+    <label class="field">
+      <span>Brightness <output id="brightness-out"></output></span>
+      <input id="brightness" type="range" min="1" max="100" step="1">
+    </label>
+
+    <label class="field">
+      <span>Seconds per screen <output id="screen-seconds-out"></output></span>
+      <input id="screen-seconds" type="range" min="3" max="60" step="1">
+    </label>
+
+    <label class="field">
+      <span>Layout</span>
+      <select id="layout-mode">
+        <option value="auto">Auto — featured for single games, cards for groups</option>
+        <option value="featured">Always featured (one game, full width)</option>
+        <option value="cards">Always cards (three games)</option>
+      </select>
+    </label>
+
+    <div class="switch-list">
+      <label class="switch"><input type="checkbox" id="show-logos"><span>Show team logos</span></label>
+      <label class="switch"><input type="checkbox" id="favorites-only"><span>Favourite teams only</span></label>
+      <label class="switch"><input type="checkbox" id="show-nonfav"><span>Show other live games</span></label>
+      <label class="switch"><input type="checkbox" id="show-upcoming"><span>Show upcoming games</span></label>
+      <label class="switch"><input type="checkbox" id="show-finals"><span>Show recent finals</span></label>
+    </div>
+
+    <div class="subsection">
+      <label class="switch"><input type="checkbox" id="sleep-enabled"><span>Sleep schedule</span></label>
+      <div class="field-row" id="sleep-times">
+        <label class="field"><span>Sleep at</span><input id="sleep-start" type="time"></label>
+        <label class="field"><span>Wake at</span><input id="sleep-end" type="time"></label>
+      </div>
+    </div>
+  </section>
+
+  <!-- MATRIX ----------------------------------------------------------->
+  <section class="card">
+    <div class="card-head">
+      <h2>Matrix hardware</h2>
+      <span class="hint">Requires a restart to change</span>
+    </div>
+    <dl class="status-grid" id="matrix-grid"></dl>
+  </section>
+
+  <footer class="foot">
+    <span>sports-scoreboard v{{ version }}</span>
+    <span id="save-state" class="save-state"></span>
+  </footer>
+</main>
+
+<div id="toast" class="toast" role="status" aria-live="polite"></div>
+<script src="{{ url_for('static', filename='app.js') }}" defer></script>
+</body>
+</html>

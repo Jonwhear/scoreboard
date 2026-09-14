@@ -1,0 +1,631 @@
+# Sports Scoreboard
+
+A local, self-contained sports scoreboard for a Raspberry Pi driving three
+chained 64×32 HUB75 LED matrices (a 192×32 canvas) through an Adafruit RGB
+Matrix Bonnet.
+
+It fetches live scores, prioritises your favourite teams, draws them on the
+panels, and is configured from a phone or laptop on your own Wi-Fi. No cloud
+account, no API key, nothing exposed to the internet.
+
+```
+┌─────────────────┬─────────────────┬─────────────────┐
+│  MIN            │      LIVE       │            GB   │
+│ [logo]      24  │       Q3        │  17     [logo]  │
+│                 │      4:23       │                 │
+└─────────────────┴─────────────────┴─────────────────┘
+        panel 1           panel 2           panel 3
+```
+
+---
+
+## Contents
+
+- [What it does](#what-it-does)
+- [Hardware assumptions](#hardware-assumptions)
+- [⚡ Power warning — read this first](#-power-warning--read-this-first)
+- [Installation](#installation)
+- [Running it](#running-it)
+- [The web UI](#the-web-ui)
+- [Configuration](#configuration)
+- [systemd service](#systemd-service)
+- [Logs](#logs)
+- [Tests](#tests)
+- [Architecture](#architecture)
+- [Root, GPIO and privilege dropping](#root-gpio-and-privilege-dropping)
+- [Matrix arguments](#matrix-arguments)
+- [Troubleshooting](#troubleshooting)
+- [The ESPN caveat](#the-espn-caveat)
+- [Project structure](#project-structure)
+- [Possible future work](#possible-future-work)
+
+---
+
+## What it does
+
+* Polls ESPN's public JSON endpoints for NFL, NCAA football, MLB, NHL, NBA,
+  NCAA men's basketball, MLS, the Premier League and the EFL Championship.
+* Normalises everything into one internal `Game` model — no provider-specific
+  JSON leaks past `scoreboard/providers/espn.py`.
+* Prioritises favourite teams, then other live games, then upcoming, then
+  recent finals, then an idle clock; rotates when several are eligible.
+* Downloads and caches team logos once, processes them for the panel size,
+  and falls back to team abbreviations when a logo is missing.
+* Adapts its polling rate: ~15 s when a favourite is playing, ~25 s when any
+  game is live, ~3 min when nothing is on.
+* Keeps working offline: the last good data is shown with a small amber
+  "stale" marker in the corner, and the clock keeps running.
+* Serves a configuration UI with a **pixel-accurate preview of the exact
+  framebuffer** the LEDs are receiving.
+* Starts at boot under systemd and restarts itself after a crash.
+
+---
+
+## Hardware assumptions
+
+| Item | Assumption |
+| --- | --- |
+| Computer | Raspberry Pi 4 |
+| HAT | Adafruit RGB Matrix Bonnet (product 3211) |
+| Panels | 3 × HUB75 64×32, chained horizontally |
+| Logical canvas | 192 × 32 |
+| GPIO mapping | `adafruit-hat` |
+| GPIO slowdown | `4` |
+| Driver | [hzeller/rpi-rgb-led-matrix](https://github.com/hzeller/rpi-rgb-led-matrix), already installed |
+
+### Wiring
+
+The panels are chained **output → input**: the bonnet's HUB75 socket goes to
+panel 1's *input*, panel 1's *output* to panel 2's *input*, panel 2's *output*
+to panel 3's *input*. The library then treats the chain as one 192×32 canvas.
+
+This project configures the library as `cols=64, chain_length=3`. It is **not**
+configured as a single 192-wide panel, because that is not what the hardware
+is and the library addresses each panel separately.
+
+---
+
+## ⚡ Power warning — read this first
+
+**Do not power the LED panels from the Raspberry Pi.**
+
+A 64×32 HUB75 panel can draw around **2–4 A at 5 V** with a bright, full-white
+image. Three of them is a realistic worst case of **8–12 A**. The Pi's own
+supply cannot do this, and the Pi's 5 V rail is not designed to pass it.
+
+* Use a dedicated, quality **5 V supply rated well above your worst case** —
+  a 5 V / 15 A or larger supply for three panels is sensible headroom.
+* Feed power **to each panel's own screw terminals**, not by daisy-chaining
+  thin power leads from panel to panel. Use proper distribution and adequate
+  wire gauge; thin or long runs cause voltage drop.
+* Keep the Pi on its own supply, and make sure the panel supply and the Pi
+  **share a ground**.
+* Lowering `brightness` in the web UI genuinely lowers current draw, and is
+  the easiest way to reduce strain while you sort the supply out.
+
+Symptoms of inadequate power are covered under
+[Troubleshooting](#troubleshooting). **Power and wiring problems cannot be
+fixed in software, and this project does not try to hide them.**
+
+---
+
+## Installation
+
+Target directory is `~/sports-scoreboard`.
+
+```bash
+git clone <this repo> ~/sports-scoreboard
+cd ~/sports-scoreboard
+./scripts/install.sh
+```
+
+The installer is idempotent and **inspects before it acts**. It reports:
+
+* Python version and whether `venv` is available
+* operating system and Raspberry Pi model
+* the `rpi-rgb-led-matrix` checkout, its `demo` binary and its BDF fonts
+* whether the `rgbmatrix` Python bindings are importable
+* whether the configured web port is already in use
+* the account the service should run as
+
+It then creates `.venv/`, installs the dependencies, links the existing
+system-wide `rgbmatrix` bindings into the venv (it never reinstalls or
+rebuilds them), and creates `config/config.json` if it does not exist.
+
+**It does not touch your rpi-rgb-led-matrix installation.**
+
+To also install the systemd unit — the only system-level change — run:
+
+```bash
+sudo ./scripts/install.sh --service
+```
+
+which prints exactly what it will change and asks for confirmation first.
+
+### If the `rgbmatrix` bindings are missing
+
+```bash
+cd ~/rpi-rgb-led-matrix/bindings/python
+sudo make install-python PYTHON=$(which python3)
+```
+
+Then re-run `./scripts/install.sh`.
+
+---
+
+## Running it
+
+### Preview mode — no hardware, no root
+
+```bash
+./scripts/run-dev.sh
+# or
+.venv/bin/python -m scoreboard.app --preview
+```
+
+Renders to an in-memory framebuffer instead of LEDs. The web UI, the preview
+image, the rotation engine and the data layer all behave exactly as they do on
+the panels. This is the right way to develop layouts, and it runs on any
+computer — a Mac or a laptop included.
+
+### On the panels
+
+```bash
+sudo .venv/bin/python -m scoreboard.app
+```
+
+Root is needed only to initialise the matrix; the process drops privileges
+immediately afterwards (see [below](#root-gpio-and-privilege-dropping)).
+
+### Useful flags
+
+| Flag | Effect |
+| --- | --- |
+| `--preview` | No GPIO, no root; render to images |
+| `--config PATH` | Use a different `config.json` |
+| `--host` / `--port` | Override the web UI bind address |
+| `--no-web` | Run the display without the web UI |
+| `--preview-out FILE.png` | Also write every frame to a PNG |
+| `--log-level DEBUG` | More detail in the journal |
+| `--strict-hardware` | Exit on matrix failure instead of falling back to preview |
+
+### Render the layouts to PNGs
+
+```bash
+.venv/bin/python scripts/render_samples.py preview-samples --scale 6
+```
+
+Writes one PNG per layout (featured live / final / upcoming, three-game cards,
+upcoming, finals, idle clock, panel test pattern) so you can check a layout
+change without a Pi.
+
+---
+
+## The web UI
+
+```
+http://<pi-hostname>.local:8080
+http://<pi-ip>:8080
+```
+
+Find the IP with `hostname -I`. The UI is responsive and built for a phone
+first; it works the same on a desktop browser or tablet.
+
+It shows:
+
+* **Status** — running state, sports-data health, last successful update,
+  which screen is on the panels right now, matrix configuration, uptime,
+  which font file each text size resolved to, logo cache statistics
+* **Preview** — the live 192×32 framebuffer, upscaled with nearest-neighbour
+  so individual LED pixels stay visible, refreshed once a second
+* **Favourites** — searchable team picker per league, with logos; stored by
+  stable league + team id, never by name
+* **Leagues** — which leagues are polled
+* **Display** — brightness, seconds per screen, layout mode, logo toggle,
+  favourites-only, which categories appear, sleep schedule
+* **Buttons** — force next screen, refresh data now, and test screens
+  (clock, sample game, sample cards, panel test pattern)
+
+**Changes take effect immediately.** Nothing here requires restarting the
+service. Saves are atomic, so a power cut cannot easily corrupt the config.
+
+### `scoreboard.local` instead of `<hostname>.local`
+
+Raspberry Pi OS already runs Avahi, so `<hostname>.local` works out of the
+box. If you want the name `scoreboard.local` specifically, the clean and
+conventional way is an Avahi alias or simply renaming the host:
+
+```bash
+# Option A — rename the Pi (changes the hostname system-wide)
+sudo raspi-config nohup do_hostname scoreboard   # then reboot
+
+# Option B — publish an extra mDNS name, leaving the hostname alone
+sudo apt install avahi-utils
+# add a systemd unit that runs:
+#   avahi-publish -a -R scoreboard.local $(hostname -I | awk '{print $1}')
+```
+
+**This project does not do either automatically** — both change how your Pi
+appears on the network, so they are your call. Getting rid of the `:8080`
+would additionally mean binding port 80, which needs either root (which we
+deliberately drop) or a `CAP_NET_BIND_SERVICE` grant or a reverse proxy.
+
+**Do not port-forward this to the internet.** It has no authentication by
+design; it is a LAN appliance.
+
+---
+
+## Configuration
+
+`config/config.json` — see [`config/README.md`](config/README.md) for the full
+field reference. It is created from `config/config.example.json` (or from
+built-in defaults) on first run, and is not in version control.
+
+Safety properties:
+
+* writes are atomic (temp file → `fsync` → `os.replace`)
+* the previous version is kept as `config.json.bak`
+* a corrupt file is moved aside as `config.json.corrupt-<timestamp>` — it is
+  never deleted — the backup is tried next, then built-in defaults
+* out-of-range values are clamped, unknown leagues dropped, unknown keys
+  ignored; a bad value never prevents startup
+
+---
+
+## systemd service
+
+```bash
+sudo ./scripts/install.sh --service      # install + enable + start
+```
+
+Then, via the wrapper (or plain `systemctl`):
+
+```bash
+./scripts/service.sh start
+./scripts/service.sh stop
+./scripts/service.sh restart
+./scripts/service.sh status
+./scripts/service.sh enable      # start at boot
+./scripts/service.sh disable
+```
+
+```bash
+sudo systemctl start sports-scoreboard
+sudo systemctl stop sports-scoreboard
+sudo systemctl restart sports-scoreboard
+systemctl status sports-scoreboard
+sudo systemctl enable sports-scoreboard
+```
+
+The unit starts after `network-online.target`, restarts on failure after a
+5 second delay (giving up after 5 failures in 5 minutes so a broken install
+does not spin forever), stops cleanly on `SIGTERM`, runs from the project
+directory using the project's virtualenv, and logs to the journal.
+
+There is also `systemd/sports-scoreboard-preview.service`, a variant that runs
+entirely unprivileged with `--preview` — handy when the panels are unplugged.
+
+---
+
+## Logs
+
+```bash
+journalctl -u sports-scoreboard -f          # follow
+journalctl -u sports-scoreboard -n 200      # last 200 lines
+journalctl -u sports-scoreboard -p warning  # warnings and errors only
+./scripts/service.sh logs                   # same, shorter
+```
+
+What you should expect to see:
+
+* **INFO** — startup, enabled leagues, each data refresh and its game count,
+  every screen change, configuration updates, logos cached
+* **WARNING** — stale/cached data in use, a logo that would not download,
+  a malformed event that was skipped, a team catalog that could not refresh
+* **ERROR** — matrix initialisation failure, a provider that is fully down,
+  corrupt configuration
+
+Nothing is logged per frame. A sustained outage logs **once**, not once per
+poll, so the journal stays readable.
+
+---
+
+## Tests
+
+```bash
+.venv/bin/python -m pytest              # ~180 tests, about 2 seconds
+.venv/bin/python -m pytest -v
+```
+
+The suite is fully offline — it uses checked-in ESPN payload fixtures in
+`tests/fixtures/`, so it neither needs the internet nor cares whether anything
+is in season. It covers ESPN normalisation (including malformed events),
+favourite matching, priority ordering and rotation, config validation and
+corruption recovery, layout rendering at several chain lengths, logo
+processing and fallback, stale/offline behaviour, the web API, font
+resolution (including the BDF conversion path), and the render loop.
+
+---
+
+## Architecture
+
+Four participants, one shared state object, no thread ever waiting on another:
+
+```
+  ┌──────────────┐   polls ESPN      ┌──────────────┐
+  │ DataScheduler│ ────────────────► │              │
+  │   (thread)   │  Game objects     │   AppState   │
+  └──────────────┘                   │  (locked)    │
+                                     │              │
+  ┌──────────────┐   reads state     │              │
+  │ DisplayRunner│ ◄──────────────── │              │
+  │   (thread)   │                   └──────────────┘
+  │              │                          ▲
+  │  rotation →  │  192×32 image            │ reads
+  │  layouts  →  │ ───────► Display ──► LEDs│
+  │              │ ───────► preview PNG     │
+  └──────────────┘                   ┌──────────────┐
+                                     │  Flask/web   │
+  ┌──────────────┐   validated write │  (threads)   │
+  │ ConfigStore  │ ◄──────────────── │              │
+  │  (atomic)    │                   └──────────────┘
+  └──────────────┘
+```
+
+* A hung ESPN request can only make the data stale — it cannot stall the
+  matrix.
+* A slow web request cannot affect the refresh loop.
+* A logo that is not cached yet never blocks a frame: the renderer draws the
+  abbreviation and a background worker fetches the artwork.
+
+Layer boundaries that matter:
+
+| Layer | Knows about | Never knows about |
+| --- | --- | --- |
+| `providers/espn.py` | ESPN's JSON and URLs | rendering, config, threads |
+| `models.py` | normalised games | any provider |
+| `rotation.py` | games, config | Pillow, rgbmatrix |
+| `display/layouts.py` | a 192×32 canvas | rgbmatrix, HTTP, ESPN |
+| `display/matrix.py` | rgbmatrix | layouts, games |
+| `web/` | config + state | how anything is drawn |
+
+The `Display` abstraction is the key one. `MatrixDisplay` and `PreviewDisplay`
+receive the *identical* rendered image, which is why the browser preview is
+trustworthy and why the whole application runs on a laptop.
+
+---
+
+## Root, GPIO and privilege dropping
+
+`rpi-rgb-led-matrix` needs root: it maps `/dev/mem` and asks for a real-time
+thread. Nothing else in this project does.
+
+**The decision:** the service starts as root, initialises the matrix, and then
+**permanently drops to an unprivileged account** before starting the web
+server, the HTTP client, or any file writes. From that point the process
+cannot regain root.
+
+The drop is done by `scoreboard/privileges.py` rather than by the library's
+own `drop_privileges` option, because the library drops to the `daemon`
+account — which cannot write `config/config.json` or the logo cache. We drop
+to the account that owns the installation instead, so file ownership stays
+sensible. The target is `display.run_as_user` in the config, falling back to
+`$SUDO_USER` and then to the owner of the source tree.
+
+Splitting the display and the web UI into two processes would be marginally
+tighter, but it would mean adding IPC and a second unit to a private home
+appliance whose web UI is already unprivileged and LAN-only. That is not a
+trade worth making here.
+
+In `--preview` mode none of this applies: no root is needed at all.
+
+---
+
+## Matrix arguments
+
+The settings in `config.json` map onto the library's options like this:
+
+| config.json | `demo` flag | Value here |
+| --- | --- | --- |
+| `rows` | `--led-rows` | 32 |
+| `cols` | `--led-cols` | 64 |
+| `chain_length` | `--led-chain` | 3 |
+| `parallel` | `--led-parallel` | 1 |
+| `gpio_mapping` | `--led-gpio-mapping` | `adafruit-hat` |
+| `slowdown_gpio` | `--led-slowdown-gpio` | 4 |
+| `brightness` | `--led-brightness` | 50 |
+| `pwm_bits` | `--led-pwm-bits` | 11 |
+| `pwm_lsb_nanoseconds` | `--led-pwm-lsb-nanoseconds` | 130 |
+| `limit_refresh_rate_hz` | `--led-limit-refresh` | 0 (unlimited) |
+| `disable_hardware_pulsing` | `--led-no-hardware-pulse` | true |
+
+The equivalent known-good `demo` invocation for this chain:
+
+```bash
+cd ~/rpi-rgb-led-matrix/examples-api-use
+sudo ./demo -D 0 \
+  --led-rows=32 --led-cols=64 --led-chain=3 \
+  --led-gpio-mapping=adafruit-hat --led-slowdown-gpio=4
+```
+
+`./scripts/test-matrix.sh demo` runs exactly that, using whatever values are
+in your `config.json`.
+
+---
+
+## Troubleshooting
+
+Start here:
+
+```bash
+./scripts/test-matrix.sh          # this project's panel test pattern
+./scripts/test-matrix.sh demo     # hzeller's demo, same settings
+./scripts/test-matrix.sh samples  # render layouts to PNGs, no hardware
+```
+
+The test pattern draws a numbered, coloured border around each 64×32 panel
+plus a grey ramp. **Use it to tell software problems from hardware problems.**
+
+### Software symptoms — configuration is wrong
+
+These are wrong from the very first frame and are always wrong the same way.
+
+| Symptom | Cause | Fix |
+| --- | --- | --- |
+| Only the first panel lights; the rest are dark | `chain_length` too low | Set `chain_length: 3` |
+| Image repeats three times across the chain | Configured as one wide panel | Use `cols: 64` + `chain_length: 3`, **not** `cols: 192` |
+| Panel numbers appear out of order | Chain wired in a different order | Re-cable output→input, or reorder physically |
+| Image split/interleaved vertically, garbled halves | Wrong `rows`, or a 1/8-scan panel | Check the panel's scan rate; `rows` must match |
+| Nothing lights at all, no errors | Wrong `gpio_mapping` | `adafruit-hat`, or `adafruit-hat-pwm` **only** if you soldered the E/4 jumper |
+| Steady flicker or shimmer everywhere | GPIO timing too fast, or hardware pulsing | Raise `slowdown_gpio` (4 → 5), keep `disable_hardware_pulsing: true` |
+| Dim, washed-out colours | Low `pwm_bits` or low brightness | Raise `pwm_bits`, raise `brightness` |
+| `MatrixUnavailableError` on start | Not root, or bindings missing | `sudo`, and build the Python bindings |
+
+If `./scripts/test-matrix.sh demo` is *also* wrong in the same way, the problem
+is not this application.
+
+### Hardware symptoms — power, wiring, heat
+
+These typically **look fine at first and degrade after seconds or minutes**,
+or change when you touch a cable. Your reported "corrupted pixels after
+running for a while" sits squarely in this category.
+
+| Symptom | Likely cause |
+| --- | --- |
+| Random bright pixels appearing over time, worse when the image is bright | **Inadequate 5 V supply** — current sags as the panels warm up and draw more |
+| Later panels in the chain dimmer or redder than the first | **Voltage drop** — power daisy-chained through thin wire; feed each panel its own pair |
+| Whole panel flickers or blanks intermittently | Loose power screw terminal, or an under-crimped spade |
+| One panel corrupts, the rest are fine | Loose/damaged HUB75 ribbon on that link; reseat or replace it |
+| Corruption starts near a specific panel and spreads down-chain | Bad output connector on the panel before it |
+| Gets worse as the session goes on, better after a cool-down | Overheating panel, or a supply drifting out of regulation under sustained load |
+| Pi reboots, or you see under-voltage warnings | The panels are loading the Pi's rail — separate the supplies |
+
+Checks, in order of how often they are the answer:
+
+1. **Measure 5 V at the far panel's terminals while displaying full white.**
+   Below about 4.7 V means the supply or wiring is inadequate. This is the
+   single most informative measurement.
+2. Turn `brightness` down to 25 in the web UI. If the corruption stops, it is
+   power, not software.
+3. Reseat every HUB75 ribbon and every power terminal.
+4. Test each panel on its own with `chain_length: 1` to isolate a bad one.
+5. Swap the ribbon between panel 1→2 and 2→3 and see whether the fault follows
+   the cable.
+
+**None of this is a software problem and it should not be papered over in
+software.** The application logs matrix errors and keeps drawing; it will not
+mask a failing supply.
+
+### Application symptoms
+
+| Symptom | Cause |
+| --- | --- |
+| Small amber mark in the top-right corner | Data is stale — ESPN is unreachable, cached data is on screen. Intentional. |
+| Idle clock when games should be on | Check enabled leagues and the sleep schedule; check `journalctl` for fetch errors |
+| Abbreviations instead of logos | Logos not downloaded yet, or `show_logos` is off, or the logo URL 404s. Harmless. |
+| Web UI unreachable | Check `systemctl status`, the port, and that you are on the same network |
+| Blocky/soft text | No BDF fonts found — the status panel shows which font each role resolved to. Point `SCOREBOARD_BDF_FONTS` at `~/rpi-rgb-led-matrix/fonts` |
+
+---
+
+## The ESPN caveat
+
+**ESPN's endpoints are not an official, supported, public developer API.**
+They are the undocumented JSON endpoints ESPN's own site and apps use. They
+need no key and no account, which is why version one uses them — but ESPN can
+change or withdraw them at any time, with no notice and no deprecation period.
+
+This is exactly why the provider abstraction exists:
+
+* `scoreboard/providers/base.py` defines the interface.
+* `scoreboard/providers/espn.py` is the **only** module that knows ESPN's URLs
+  or JSON shape.
+* Everything downstream consumes `scoreboard/models.py` types.
+
+To move to another source, write one new class implementing `SportsProvider`,
+register it in `providers/__init__.py`, and change nothing else.
+
+Parsing is deliberately defensive: a malformed event is logged and skipped, a
+missing field becomes `None`, and an unrecognised payload yields zero games
+rather than an exception. A schema change should degrade the display, not
+crash it.
+
+Please be a good citizen: the polling intervals here are deliberately modest,
+and `min_interval_seconds` enforces a floor. Do not lower them much.
+
+---
+
+## Project structure
+
+```
+sports-scoreboard/
+├── README.md
+├── requirements.txt / pyproject.toml
+├── config/
+│   ├── config.example.json      template (config.json is generated, gitignored)
+│   └── README.md                field-by-field reference
+├── scoreboard/
+│   ├── app.py                   entry point, wiring, signals, shutdown
+│   ├── config.py                typed config + atomic persistence
+│   ├── models.py                Game / GameTeam / TeamInfo — provider-independent
+│   ├── leagues.py               canonical league ids (never ESPN URLs)
+│   ├── state.py                 the one shared, locked state object
+│   ├── scheduler.py             adaptive polling thread
+│   ├── runner.py                the render loop
+│   ├── rotation.py              priority + rotation engine
+│   ├── logos.py                 download, process and cache logos
+│   ├── teams.py                 cached team catalogs for the picker
+│   ├── httpclient.py            timeouts, retries, last-known-good cache
+│   ├── privileges.py            drop root after the matrix is up
+│   ├── paths.py                 where files live
+│   ├── samples.py               synthetic games for tests and the UI
+│   ├── providers/
+│   │   ├── base.py              the SportsProvider interface
+│   │   └── espn.py              the only ESPN-aware module
+│   ├── display/
+│   │   ├── base.py              Display interface
+│   │   ├── matrix.py            rgbmatrix backend
+│   │   ├── preview.py           image backend (browser preview, dev)
+│   │   ├── layouts.py           layouts A–E on a 192×32 canvas
+│   │   └── fonts.py             BDF → TTF → built-in font resolution
+│   ├── assets/fonts/            drop extra .bdf files here
+│   └── web/                     Flask app, JSON API, HTML/CSS/JS
+├── scripts/
+│   ├── install.sh               inspect, set up, optionally install the service
+│   ├── run-dev.sh               preview mode
+│   ├── test-matrix.sh           panel test pattern / demo / sample PNGs
+│   ├── service.sh               start/stop/restart/status/logs
+│   ├── render_samples.py        render every layout to PNG
+│   └── show_pattern.py          the panel test pattern, on real hardware
+├── systemd/
+│   ├── sports-scoreboard.service
+│   └── sports-scoreboard-preview.service
+├── tests/                       ~180 offline tests + ESPN fixtures
+└── var/                         runtime caches (gitignored)
+```
+
+`var/` holds everything the app writes at runtime — logos, team catalogs,
+cached HTTP responses, converted fonts — deliberately kept out of the package
+directory so the source tree stays clean and can be read-only.
+
+---
+
+## Possible future work
+
+Not needed for version one, but genuinely worthwhile:
+
+* **A second provider.** The abstraction is there; a paid or alternative feed
+  would remove the ESPN risk entirely.
+* **Per-sport layouts.** Baseball wants a base-runner diamond and a count;
+  football wants down and distance and a red-zone cue. The hooks
+  (`Game.situation`) are already populated.
+* **Scrolling text** for long team names, headlines or a ticker row.
+* **Score-change animation** — a brief flash or wipe when a favourite scores.
+  Very effective on a panel, and cheap to add in `layouts.py`.
+* **Ambient brightness** via a cheap I²C light sensor, instead of a fixed
+  schedule.
+* **A "game starting soon" alert screen** in the last few minutes before a
+  favourite's kickoff.
+* **Standings and records screens** — ESPN exposes both.
+* **Authentication on the web UI** if it ever leaves a trusted LAN. Today it
+  is deliberately open and deliberately LAN-only.

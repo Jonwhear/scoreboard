@@ -1,0 +1,19 @@
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+*.egg-info/
+.pytest_cache/
+
+# Runtime state: caches, downloaded logos, converted fonts
+var/
+
+# The live configuration is machine-specific; config.example.json is the
+# version-controlled template.
+config/config.json
+config/config.json.bak
+config/config.json.corrupt-*
+
+# Rendered previews
+preview-samples/
+*.preview.png

@@ -1,0 +1,117 @@
+{
+ "leagues": [
+  {
+   "abbreviation": "MLB"
+  }
+ ],
+ "events": [
+  {
+   "id": "401570100",
+   "date": "2025-09-14T18:15Z",
+   "name": "Chicago Cubs at St. Louis Cardinals",
+   "shortName": "CHC @ STL",
+   "competitions": [
+    {
+     "id": "401570100",
+     "venue": {
+      "fullName": "Busch Stadium"
+     },
+     "competitors": [
+      {
+       "id": "24",
+       "uid": "s:20~l:28~t:24",
+       "type": "team",
+       "order": 0,
+       "homeAway": "home",
+       "score": "4",
+       "team": {
+        "id": "24",
+        "uid": "s:20~l:28~t:24",
+        "location": "St. Louis",
+        "name": "Cardinals",
+        "abbreviation": "STL",
+        "displayName": "St. Louis Cardinals",
+        "shortDisplayName": "Cardinals",
+        "color": "c41e3a",
+        "alternateColor": "0c2340",
+        "logo": "https://a.espncdn.com/i/teamlogos/mlb/500/stl.png",
+        "logos": [
+         {
+          "href": "https://a.espncdn.com/i/teamlogos/mlb/500/stl.png"
+         }
+        ]
+       },
+       "records": [
+        {
+         "name": "overall",
+         "abbreviation": "Any",
+         "type": "total",
+         "summary": "80-68"
+        }
+       ],
+       "statistics": []
+      },
+      {
+       "id": "16",
+       "uid": "s:20~l:28~t:16",
+       "type": "team",
+       "order": 1,
+       "homeAway": "away",
+       "score": "2",
+       "team": {
+        "id": "16",
+        "uid": "s:20~l:28~t:16",
+        "location": "Chicago",
+        "name": "Cubs",
+        "abbreviation": "CHC",
+        "displayName": "Chicago Cubs",
+        "shortDisplayName": "Cubs",
+        "color": "0e3386",
+        "alternateColor": "cc3433",
+        "logo": "https://a.espncdn.com/i/teamlogos/mlb/500/chc.png",
+        "logos": [
+         {
+          "href": "https://a.espncdn.com/i/teamlogos/mlb/500/chc.png"
+         }
+        ]
+       },
+       "records": [
+        {
+         "name": "overall",
+         "abbreviation": "Any",
+         "type": "total",
+         "summary": "77-71"
+        }
+       ],
+       "statistics": []
+      }
+     ],
+     "status": {
+      "displayClock": "0:00",
+      "period": 7,
+      "type": {
+       "state": "in",
+       "detail": "Bottom 7th",
+       "shortDetail": "Bot 7th"
+      }
+     },
+     "situation": {
+      "balls": 2,
+      "strikes": 1,
+      "outs": 1,
+      "onFirst": true,
+      "onSecond": false,
+      "onThird": true
+     },
+     "broadcasts": [
+      {
+       "names": [
+        "BSMW"
+       ]
+      }
+     ]
+    }
+   ]
+  }
+ ]
+}
