@@ -111,13 +111,77 @@ fixed in software, and this project does not try to hide them.**
 
 ## Installation
 
-Target directory is `~/sports-scoreboard`.
+### Deploying to the Pi, start to finish
+
+Run these **as your normal user on the Pi** (the `pi` account, or whatever you
+log in as). Do not `sudo git clone` — the installer works out which account to
+drop privileges to from who owns the files, and a root-owned clone means the
+service never gives up root.
 
 ```bash
-git clone <this repo> ~/sports-scoreboard
+# 1. Clone. Note the branch and the target directory name.
+cd ~
+git clone -b claude/pi-sports-scoreboard-mmuqbi \
+    https://github.com/Jonwhear/scoreboard.git sports-scoreboard
 cd ~/sports-scoreboard
+
+# 2. Inspect the system, build the venv, install dependencies.
+#    Read the report it prints -- it tells you whether the rgbmatrix
+#    bindings and the BDF fonts were found.
 ./scripts/install.sh
+
+# 3. Prove it runs before involving hardware or systemd.
+.venv/bin/python -m pytest          # ~195 tests, offline, ~3 seconds
+./scripts/run-dev.sh                # then open the web UI, Ctrl-C to stop
+
+# 4. Prove the panels are wired and configured correctly.
+./scripts/test-matrix.sh            # numbered borders, one per panel
+
+# 5. Install the service so it starts at boot.
+#    This prints exactly what it will change and asks first.
+sudo ./scripts/install.sh --service
+
+# 6. Confirm.
+systemctl status sports-scoreboard
+journalctl -u sports-scoreboard -f
 ```
+
+Step 5 is the only step that changes anything outside `~/sports-scoreboard`,
+and it is the step that makes it start on boot: it writes
+`/etc/systemd/system/sports-scoreboard.service`, runs `systemctl
+daemon-reload`, then `systemctl enable --now sports-scoreboard` (`enable` =
+at boot, `--now` = also start it immediately).
+
+**Sanity checks in the startup log.** `journalctl -u sports-scoreboard -n 40`
+should show, in order:
+
+```
+Initializing matrix: 64x32 per panel, chain=3, ... -> 192x32 canvas
+Matrix initialized (192x32)
+Dropped privileges to pi (uid=1000 gid=1000)
+Leagues enabled: nfl, mlb, nhl, nba | favourites: 0 | canvas 192x32 | backend matrix
+Web UI on http://0.0.0.0:8080
+```
+
+If you see `backend preview` instead of `backend matrix`, the matrix could not
+be initialized — the ERROR line just above it says why, and the web UI still
+works so you can debug from your phone. If you see `Still running as root`,
+the installation is owned by root; fix it with
+`sudo chown -R $USER ~/sports-scoreboard` and restart the service.
+
+### Updating later
+
+```bash
+cd ~/sports-scoreboard
+git pull
+.venv/bin/python -m pip install -q -r requirements.txt   # only if deps changed
+sudo systemctl restart sports-scoreboard
+```
+
+Your `config/config.json`, cached logos and team lists are gitignored, so a
+`git pull` never disturbs your settings.
+
+### What the installer does
 
 The installer is idempotent and **inspects before it acts**. It reports:
 
@@ -141,6 +205,20 @@ sudo ./scripts/install.sh --service
 ```
 
 which prints exactly what it will change and asks for confirmation first.
+
+### If `pip install` is slow or fails on Pillow
+
+On **64-bit** Raspberry Pi OS (the usual choice for a Pi 4) Pillow installs
+from a prebuilt wheel in seconds. On **32-bit** Pi OS there is no prebuilt
+wheel, so pip compiles it from source — several minutes, and it fails outright
+without the build dependencies:
+
+```bash
+sudo apt install -y python3-dev libjpeg-dev zlib1g-dev libfreetype6-dev
+./scripts/install.sh          # then re-run
+```
+
+Check which you have with `uname -m`: `aarch64` is 64-bit, `armv7l` is 32-bit.
 
 ### If the `rgbmatrix` bindings are missing
 
@@ -524,6 +602,8 @@ mask a failing supply.
 | Idle clock when games should be on | Check enabled leagues and the sleep schedule; check `journalctl` for fetch errors |
 | Abbreviations instead of logos | Logos not downloaded yet, or `show_logos` is off, or the logo URL 404s. Harmless. |
 | Web UI unreachable | Check `systemctl status`, the port, and that you are on the same network |
+| Team picker stays empty; no logos ever appear | The service user cannot write `var/`. The log says so explicitly: `sudo chown -R $USER ~/sports-scoreboard`, then restart |
+| Log says `Still running as root` | The project is root-owned (usually a `sudo git clone`). `sudo chown -R $USER ~/sports-scoreboard` |
 | Blocky/soft text | No BDF fonts found — the status panel shows which font each role resolved to. Point `SCOREBOARD_BDF_FONTS` at `~/rpi-rgb-led-matrix/fonts` |
 
 ---

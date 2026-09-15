@@ -15,7 +15,7 @@ from __future__ import annotations
 import logging
 import os
 import pwd
-from typing import Optional, Sequence
+from typing import List, Optional, Sequence
 
 log = logging.getLogger(__name__)
 
@@ -96,6 +96,15 @@ def ensure_writable_by(paths: Sequence[str], username: Optional[str]) -> None:
                     log.warning("Could not chown %s to %s: %s", name, username, exc)
         if changed:
             log.info("Handed %d path(s) under %s to %s", changed, path, username)
+
+
+def unwritable_paths(paths: Sequence[str]) -> List[str]:
+    """Return the paths the current user cannot write to."""
+    problems = []
+    for path in paths:
+        if not os.access(path, os.W_OK | os.X_OK):
+            problems.append(path)
+    return problems
 
 
 def drop_privileges(username: Optional[str]) -> bool:

@@ -32,7 +32,7 @@ from .display.preview import PreviewDisplay
 from .httpclient import HttpClient
 from .logos import LogoCache
 from .privileges import (current_username, drop_privileges, ensure_writable_by,
-                         is_root, resolve_target_user)
+                         is_root, resolve_target_user, unwritable_paths)
 from .providers import build_provider
 from .runner import DisplayRunner
 from .scheduler import DataScheduler
@@ -123,8 +123,26 @@ def _drop_privileges_if_needed(config) -> None:
     target = resolve_target_user(config.display.run_as_user)
     # Do this before dropping, not after: once we are unprivileged we can no
     # longer fix the ownership of anything root created on the way up.
-    ensure_writable_by([paths.CONFIG_DIR, paths.VAR_DIR], target)
-    drop_privileges(target)
+    writable = [paths.CONFIG_DIR, paths.VAR_DIR]
+    ensure_writable_by(writable, target)
+    if drop_privileges(target):
+        _warn_about_unwritable(writable, target)
+
+
+def _warn_about_unwritable(writable, username) -> None:
+    """Say plainly if the account we dropped to cannot write where it must.
+
+    Without this the first failure surfaces somewhere unhelpful (a font cache
+    or a logo write) and looks like a bug rather than a permissions problem.
+    """
+    problems = unwritable_paths(writable)
+    if not problems:
+        return
+    log.error(
+        "Running as %s, which cannot write: %s. Logos, team lists and "
+        "configuration changes will fail. Fix with: sudo chown -R %s %s",
+        username, ", ".join(problems), username, " ".join(problems),
+    )
 
 
 def run(args: argparse.Namespace) -> int:

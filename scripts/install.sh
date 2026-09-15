@@ -95,9 +95,12 @@ fi
 
 if "$PYTHON" -c 'import rgbmatrix' 2>/dev/null; then
   ok "rgbmatrix bindings importable by the system python"
+elif [ -n "$MATRIX_DIR" ]; then
+  warn "The system python cannot import 'rgbmatrix'. Build the bindings with:"
+  warn "  cd $MATRIX_DIR/bindings/python && sudo make install-python PYTHON=\$(which python3)"
 else
-  warn "The system python cannot import 'rgbmatrix'."
-  warn "Build them with: cd $MATRIX_DIR/bindings/python && sudo make install-python"
+  warn "The system python cannot import 'rgbmatrix' and rpi-rgb-led-matrix was not found."
+  warn "Preview mode will work; driving the panels will not."
 fi
 
 PORT="$(PROJECT_DIR="$PROJECT_DIR" "$PYTHON" - <<'PY' 2>/dev/null || echo 8080
@@ -128,22 +131,31 @@ fi
 "$VENV/bin/python" -m pip install --quiet -r "$PROJECT_DIR/requirements.txt"
 ok "Dependencies installed"
 
-# The matrix bindings are installed system-wide by rpi-rgb-led-matrix's
-# makefile; expose them to the venv rather than reinstalling anything.
-if ! "$VENV/bin/python" -c 'import rgbmatrix' 2>/dev/null; then
-  SYS_SITE="$("$PYTHON" -c 'import sysconfig; print(sysconfig.get_paths()["purelib"])')"
-  if "$PYTHON" -c 'import rgbmatrix' 2>/dev/null; then
-    VENV_SITE="$("$VENV/bin/python" -c 'import sysconfig; print(sysconfig.get_paths()["purelib"])')"
-    echo "$SYS_SITE" > "$VENV_SITE/rgbmatrix-system.pth"
+# The matrix bindings are built and installed system-wide by
+# rpi-rgb-led-matrix's own makefile. Expose that existing build to the
+# virtualenv with a .pth file rather than reinstalling or rebuilding
+# anything -- the working installation is left exactly as it is.
+if "$VENV/bin/python" -c 'import rgbmatrix' 2>/dev/null; then
+  ok "rgbmatrix importable from the virtualenv"
+elif "$PYTHON" -c 'import rgbmatrix' 2>/dev/null; then
+  # Ask the system python where the package actually lives. The bindings are
+  # a compiled extension, so they land in platlib, which is not always the
+  # same directory as purelib on Debian/Raspberry Pi OS.
+  RGB_SITE="$("$PYTHON" -c 'import os, rgbmatrix; print(os.path.dirname(os.path.dirname(os.path.abspath(rgbmatrix.__file__))))')"
+  VENV_SITE="$("$VENV/bin/python" -c 'import sysconfig; print(sysconfig.get_paths()["purelib"])')"
+  if [ -n "$RGB_SITE" ] && [ -d "$RGB_SITE" ]; then
+    echo "$RGB_SITE" > "$VENV_SITE/rgbmatrix-system.pth"
     if "$VENV/bin/python" -c 'import rgbmatrix' 2>/dev/null; then
-      ok "Linked the system rgbmatrix bindings into the virtualenv"
+      ok "Linked the system rgbmatrix bindings ($RGB_SITE) into the virtualenv"
     else
-      warn "Could not expose rgbmatrix to the virtualenv; preview mode only."
       rm -f "$VENV_SITE/rgbmatrix-system.pth"
+      fail "Found rgbmatrix at $RGB_SITE but the virtualenv still cannot import it."
+      warn "The scoreboard will run in preview mode only until this is resolved."
+      warn "Check that the bindings were built for $PY_VERSION."
     fi
   fi
 else
-  ok "rgbmatrix importable from the virtualenv"
+  warn "rgbmatrix is not importable by either python; hardware output is unavailable."
 fi
 
 # ---------------------------------------------------------------- config
@@ -169,6 +181,11 @@ if [ "$INSTALL_SERVICE" -eq 1 ]; then
   echo "    2. run: systemctl daemon-reload"
   echo "    3. run: systemctl enable --now $SERVICE_NAME"
   echo "  Nothing else on the system is modified."
+  if [ "$RUN_USER" = "root" ]; then
+    warn "The service user resolved to 'root', so privileges will NOT be dropped."
+    warn "This usually means the project was cloned with sudo. Fix it with:"
+    warn "  sudo chown -R <your-user> $PROJECT_DIR"
+  fi
   if [ "$ASSUME_YES" -ne 1 ]; then
     read -r -p "  Proceed? [y/N] " reply
     case "$reply" in [yY]*) ;; *) echo "  Skipped."; exit 0 ;; esac
@@ -180,13 +197,23 @@ if [ "$INSTALL_SERVICE" -eq 1 ]; then
   sed -e "s|__INSTALL_DIR__|$PROJECT_DIR|g" -e "s|__RUN_USER__|$RUN_USER|g" \
       "$SERVICE_SRC" > "$SERVICE_DST"
   chmod 644 "$SERVICE_DST"
-  systemctl daemon-reload
-  systemctl enable --now "$SERVICE_NAME"
-  ok "Service installed and started"
+  ok "Wrote $SERVICE_DST"
+  if ! systemctl daemon-reload; then
+    fail "systemctl daemon-reload failed. The unit file is in place; run"
+    fail "  sudo systemctl daemon-reload && sudo systemctl enable --now $SERVICE_NAME"
+    exit 1
+  fi
+  if ! systemctl enable --now "$SERVICE_NAME"; then
+    fail "Could not enable/start the service. Check: journalctl -u $SERVICE_NAME -n 50"
+    exit 1
+  fi
+  ok "Service installed, enabled at boot, and started"
   systemctl --no-pager --lines=0 status "$SERVICE_NAME" || true
 fi
 
 bold "Done"
+HOST_NAME="$(hostname 2>/dev/null || echo raspberrypi)"
+HOST_IP="$(hostname -I 2>/dev/null | awk '{print $1}')"
 cat <<EOF
 
   Run it now (preview, no hardware):
@@ -196,8 +223,9 @@ cat <<EOF
       sudo $VENV/bin/python -m scoreboard.app
 
   Web UI:
-      http://\$(hostname).local:${PORT}    or   http://\$(hostname -I | awk '{print \$1}'):${PORT}
+      http://${HOST_NAME}.local:${PORT}${HOST_IP:+
+      http://${HOST_IP}:${PORT}}
 
-  Install the service:
+  Install the service so it starts at boot:
       sudo $0 --service
 EOF
