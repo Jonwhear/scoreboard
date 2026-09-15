@@ -66,6 +66,7 @@ account, no API key, nothing exposed to the internet.
 | Item | Assumption |
 | --- | --- |
 | Computer | Raspberry Pi 4 |
+| OS | Raspberry Pi OS Buster (Python 3.7) or newer, 32- or 64-bit |
 | HAT | Adafruit RGB Matrix Bonnet (product 3211) |
 | Panels | 3 × HUB75 64×32, chained horizontally |
 | Logical canvas | 192 × 32 |
@@ -206,19 +207,41 @@ sudo ./scripts/install.sh --service
 
 which prints exactly what it will change and asks for confirmation first.
 
+### Older Raspberry Pi OS (Buster, Python 3.7)
+
+Supported. The dependency ranges are deliberately wide, so pip installs the
+newest release of each library that still supports the Python it finds:
+
+| | Buster / Python 3.7 | Bookworm / Python 3.11 |
+| --- | --- | --- |
+| Flask | 2.2.5 | 3.x |
+| Pillow | 9.5.0 | 11.x / 12.x |
+| waitress | 2.1.2 | 3.x |
+| pytest | 7.4 | 8.x / 9.x |
+
+The test suite passes and the layouts render pixel-for-pixel identically on
+both sets, so there is no reason to reinstall the OS just to run this — and
+upgrading would mean rebuilding your working rpi-rgb-led-matrix.
+
+Worth doing eventually, though: Buster stopped getting security updates in
+2024, and a 64-bit Bookworm image is faster and gets prebuilt wheels for
+everything. Just budget time to rebuild the matrix library afterwards.
+
 ### If `pip install` is slow or fails on Pillow
 
-On **64-bit** Raspberry Pi OS (the usual choice for a Pi 4) Pillow installs
-from a prebuilt wheel in seconds. On **32-bit** Pi OS there is no prebuilt
-wheel, so pip compiles it from source — several minutes, and it fails outright
-without the build dependencies:
+Raspberry Pi OS configures [piwheels](https://www.piwheels.org) out of the
+box, which serves prebuilt ARM wheels — so Pillow normally installs in
+seconds even on 32-bit. If piwheels has no wheel for your combination, pip
+compiles from source instead, which takes several minutes and fails without
+the build dependencies:
 
 ```bash
 sudo apt install -y python3-dev libjpeg-dev zlib1g-dev libfreetype6-dev
 ./scripts/install.sh          # then re-run
 ```
 
-Check which you have with `uname -m`: `aarch64` is 64-bit, `armv7l` is 32-bit.
+Check which architecture you have with `uname -m`: `aarch64` is 64-bit,
+`armv7l` is 32-bit.
 
 ### If the `rgbmatrix` bindings are missing
 

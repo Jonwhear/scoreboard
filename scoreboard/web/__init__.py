@@ -34,7 +34,13 @@ class Services:
 def create_app(services: Services) -> Flask:
     """Build the Flask application."""
     app = Flask(__name__, static_folder="static", template_folder="templates")
-    app.config["JSON_SORT_KEYS"] = False
+    # Keep JSON in insertion order. Flask 2.2 introduced app.json and 2.3
+    # removed the old JSON_SORT_KEYS config key, so prefer the provider and
+    # fall back for anything older -- Raspberry Pi OS Buster caps us at 2.2.
+    if hasattr(app, "json"):
+        app.json.sort_keys = False
+    else:  # pragma: no cover - Flask < 2.2
+        app.config["JSON_SORT_KEYS"] = False
     app.extensions["scoreboard"] = services
 
     from .api import bp as api_bp

@@ -2,16 +2,16 @@
 name = "sports-scoreboard"
 version = "1.0.0"
 description = "Local sports scoreboard for a Raspberry Pi driving chained HUB75 LED matrices"
-requires-python = ">=3.9"
+requires-python = ">=3.7"
 dependencies = [
-    "Flask>=3.0,<4",
-    "requests>=2.31,<3",
-    "Pillow>=10.0",
-    "waitress>=3.0,<4",
+    "Flask>=2.2,<4",
+    "requests>=2.25,<3",
+    "Pillow>=9.0",
+    "waitress>=2.1,<4",
 ]
 
 [project.optional-dependencies]
-dev = ["pytest>=8.0"]
+dev = ["pytest>=7.0"]
 
 [project.scripts]
 sports-scoreboard = "scoreboard.app:main"

@@ -1,12 +1,19 @@
 # Runtime dependencies. Deliberately small.
 #
+# The version ranges are deliberately wide so that pip picks whatever is
+# newest for the Python it is running under. That matters because Raspberry
+# Pi OS Buster ships Python 3.7, where the ceilings are Flask 2.2.5,
+# Pillow 9.5, waitress 2.1.2 and pytest 7.4; a current 64-bit Bookworm image
+# gets the latest of each instead. pip honours each project's Requires-Python
+# metadata, so one file covers both.
+#
 # The rgbmatrix bindings are NOT listed here: they are built from the
 # rpi-rgb-led-matrix checkout that already exists on the Pi, and installing
 # them from PyPI would shadow that working build.
-Flask>=3.0,<4
-requests>=2.31,<3
-Pillow>=10.0
-waitress>=3.0,<4      # small production WSGI server; Flask's own is a fallback
+Flask>=2.2,<4
+requests>=2.25,<3
+Pillow>=9.0
+waitress>=2.1,<4      # small production WSGI server; Flask's own is a fallback
 
 # Development / test
-pytest>=8.0
+pytest>=7.0

@@ -64,10 +64,24 @@ if [ -z "$PYTHON" ]; then
 fi
 PY_VERSION="$("$PYTHON" -c 'import sys; print("%d.%d.%d" % sys.version_info[:3])')"
 echo "  python            : $PY_VERSION ($PYTHON)"
-"$PYTHON" -c 'import sys; raise SystemExit(0 if sys.version_info >= (3, 9) else 1)' || {
-  fail "Python 3.9 or newer is required."; exit 1; }
-"$PYTHON" -c 'import venv' 2>/dev/null || {
-  fail "The venv module is missing. Install it with: sudo apt install python3-venv"; exit 1; }
+"$PYTHON" -c 'import sys; raise SystemExit(0 if sys.version_info >= (3, 7) else 1)' || {
+  fail "Python 3.7 or newer is required. This system has $PY_VERSION."
+  fail "Upgrade Raspberry Pi OS, or install a newer python3."
+  exit 1; }
+if ! "$PYTHON" -c 'import sys; raise SystemExit(0 if sys.version_info >= (3, 9) else 1)'; then
+  warn "Python $PY_VERSION is older than 3.9, so pip will install the last"
+  warn "versions of Flask/Pillow/waitress that still support it. That is"
+  warn "supported, but a 64-bit Raspberry Pi OS (Bookworm) image is faster"
+  warn "and gets current security updates."
+fi
+# On Debian/Raspberry Pi OS 'import venv' succeeds even when the package that
+# makes it usable is absent, so check ensurepip too -- that is the piece
+# python3-venv actually provides.
+if ! "$PYTHON" -c 'import venv, ensurepip' 2>/dev/null; then
+  fail "The venv module is not usable. Install it with:"
+  fail "  sudo apt install -y python3-venv"
+  exit 1
+fi
 
 # rpi-rgb-led-matrix: find it, do not touch it.
 MATRIX_DIR=""
