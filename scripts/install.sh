@@ -100,7 +100,7 @@ else
   warn "Build them with: cd $MATRIX_DIR/bindings/python && sudo make install-python"
 fi
 
-PORT="$("$PYTHON" - <<'PY' 2>/dev/null || echo 8080
+PORT="$(PROJECT_DIR="$PROJECT_DIR" "$PYTHON" - <<'PY' 2>/dev/null || echo 8080
 import json, os, sys
 path = os.path.join(os.environ.get("PROJECT_DIR", "."), "config", "config.json")
 try:

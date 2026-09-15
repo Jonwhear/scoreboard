@@ -174,3 +174,44 @@ def test_drop_privileges_reports_an_unknown_user(monkeypatch, caplog):
     with caplog.at_level("ERROR"):
         assert privileges.drop_privileges("definitely-not-a-user-12345") is False
     assert any("does not exist" in record.message for record in caplog.records)
+
+
+def test_ensure_writable_by_is_a_no_op_when_not_root(tmp_path, monkeypatch):
+    from scoreboard import privileges
+
+    monkeypatch.setattr(privileges, "is_root", lambda: False)
+    (tmp_path / "var").mkdir()
+    privileges.ensure_writable_by([str(tmp_path / "var")], "nobody")  # must not raise
+
+
+def test_ensure_writable_by_hands_over_directories(tmp_path):
+    """Root-created cache directories must end up owned by the service user."""
+    import os
+    import pwd
+
+    from scoreboard import privileges
+
+    if os.geteuid() != 0:
+        pytest.skip("needs root to change ownership")
+    try:
+        target = pwd.getpwnam("nobody")
+    except KeyError:  # pragma: no cover
+        pytest.skip("no 'nobody' account on this system")
+
+    var = tmp_path / "var"
+    (var / "logos" / "raw").mkdir(parents=True)
+    (var / "logos" / "raw" / "x.png").write_bytes(b"")
+    assert os.stat(var / "logos" / "raw").st_uid == 0
+
+    privileges.ensure_writable_by([str(var)], "nobody")
+
+    for path in (var, var / "logos", var / "logos" / "raw",
+                 var / "logos" / "raw" / "x.png"):
+        assert os.stat(path).st_uid == target.pw_uid, f"{path} was not handed over"
+
+
+def test_ensure_writable_by_tolerates_missing_paths(tmp_path, monkeypatch):
+    from scoreboard import privileges
+
+    monkeypatch.setattr(privileges, "is_root", lambda: True)
+    privileges.ensure_writable_by([str(tmp_path / "does-not-exist")], "nobody")

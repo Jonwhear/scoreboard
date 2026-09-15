@@ -31,7 +31,8 @@ from .display.fonts import FontRegistry
 from .display.preview import PreviewDisplay
 from .httpclient import HttpClient
 from .logos import LogoCache
-from .privileges import current_username, drop_privileges, is_root, resolve_target_user
+from .privileges import (current_username, drop_privileges, ensure_writable_by,
+                         is_root, resolve_target_user)
 from .providers import build_provider
 from .runner import DisplayRunner
 from .scheduler import DataScheduler
@@ -120,6 +121,9 @@ def _drop_privileges_if_needed(config) -> None:
         log.info("Running as %s", current_username())
         return
     target = resolve_target_user(config.display.run_as_user)
+    # Do this before dropping, not after: once we are unprivileged we can no
+    # longer fix the ownership of anything root created on the way up.
+    ensure_writable_by([paths.CONFIG_DIR, paths.VAR_DIR], target)
     drop_privileges(target)
 
 

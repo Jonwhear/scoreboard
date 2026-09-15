@@ -15,7 +15,7 @@ from __future__ import annotations
 import logging
 import os
 import pwd
-from typing import Optional
+from typing import Optional, Sequence
 
 log = logging.getLogger(__name__)
 
@@ -61,6 +61,41 @@ def _source_owner() -> str:
         return pwd.getpwuid(uid).pw_name
     except (OSError, KeyError):
         return ""
+
+
+def ensure_writable_by(paths: Sequence[str], username: Optional[str]) -> None:
+    """Hand ownership of the writable directories to ``username``.
+
+    The service starts as root, so any directory it creates before dropping
+    privileges (``var/``, ``config/``) ends up root-owned and the dropped
+    account can no longer write there. Nothing crashes -- caches just
+    silently stop working, which is worse. So transfer ownership first.
+    """
+    if not is_root() or not username:
+        return
+    try:
+        entry = pwd.getpwnam(username)
+    except KeyError:
+        log.error("Cannot hand over directory ownership: user %r does not exist", username)
+        return
+
+    for path in paths:
+        if not os.path.exists(path):
+            continue
+        changed = 0
+        for root_dir, dir_names, file_names in os.walk(path):
+            for name in [root_dir] + [os.path.join(root_dir, n)
+                                      for n in dir_names + file_names]:
+                try:
+                    info = os.stat(name)
+                    if info.st_uid == entry.pw_uid and info.st_gid == entry.pw_gid:
+                        continue
+                    os.chown(name, entry.pw_uid, entry.pw_gid)
+                    changed += 1
+                except OSError as exc:
+                    log.warning("Could not chown %s to %s: %s", name, username, exc)
+        if changed:
+            log.info("Handed %d path(s) under %s to %s", changed, path, username)
 
 
 def drop_privileges(username: Optional[str]) -> bool:
