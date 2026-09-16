@@ -606,8 +606,8 @@ get wrong. A rock-steady 120 Hz looks fine; a rate swinging between 112 and
 
 | What you see | Cause | Go to |
 | --- | --- | --- |
-| Average below ~100 Hz | Timing — not enough refresh | steps 1 and 4 below |
-| **Wide gap between the current rate and the `lowest` figure** (say 112 vs 157) | Timing — *jitter*, something is interrupting the refresh thread | steps 2 and 3 below |
+| Average below ~100 Hz | Timing — not enough refresh | steps 2 and 5 below |
+| **Wide gap between the current rate and the `lowest` figure** (say 112 vs 157) | Timing — *jitter*, the frame period keeps moving | step 1 first, then 3 and 4 |
 | Rate is high **and steady**, and it still flickers | **Power** | the hardware table further down |
 | `white` far worse than `pattern`, or brightness 25 largely fixes it | **Power** | the hardware table further down |
 | `./scripts/diagnose.sh` reports any under-voltage | **Power — the Pi's own supply** | give the Pi its own adequate supply |
@@ -621,16 +621,33 @@ panels, which still needs measuring at the far panel's terminals.
 **Timing fixes, in descending order of how much they help.** Try them one at
 a time with `tune-matrix.py`, then persist the winner with `--save`:
 
-1. **Fewer PWM bits.** Raises the average — each bit you drop roughly doubles
-   the refresh rate. Only worth doing if the average is low; it does not help
-   jitter. Scoreboard content is flat colour, so the lost colour depth is
-   essentially invisible:
+1. **Pin the refresh rate.** If the complaint is *jitter* (a wide gap between
+   the current rate and the `lowest` figure) this is the first thing to try:
+   it costs nothing, needs no reboot, and changes nothing about your system.
+   The library then makes every frame take the same time instead of running
+   as fast as it happens to manage, so the modulation period stops moving —
+   which is the thing your eye is actually picking up.
+
+   Pick a value just below the `lowest` figure you measured:
+   ```bash
+   # measured 157Hz swinging down to 112Hz -> pin it under the floor
+   sudo .venv/bin/python scripts/tune-matrix.py --limit-refresh 100 --pattern white
+   ```
+   Then creep it up (105, 110) to find the highest rate that stays rock
+   steady, and save it. A constant 100 Hz looks far better than anything
+   oscillating between 112 and 157 Hz.
+
+2. **Fewer PWM bits.** Raises the average — each bit you drop roughly doubles
+   the refresh rate. Worth doing if the average is low, or to buy headroom so
+   you can pin the rate higher in step 1. It does not by itself help jitter.
+   Scoreboard content is flat colour, so the lost colour depth is essentially
+   invisible:
    ```bash
    sudo .venv/bin/python scripts/tune-matrix.py --pwm-bits 8
    sudo .venv/bin/python scripts/tune-matrix.py --pwm-bits 7   # if still not enough
    ```
 
-2. **Hardware pulsing.** The best fix for *jitter*: it moves the bit timing
+3. **Hardware pulsing.** The deepest fix for *jitter*: it moves the bit timing
    onto a hardware timer instead of a software loop the scheduler can
    interrupt. It shares hardware with the onboard sound, so that has to go
    first. **This changes your system:** it disables the Pi's analogue/HDMI
@@ -643,7 +660,7 @@ a time with `tune-matrix.py`, then persist the winner with `--save`:
    sudo .venv/bin/python scripts/tune-matrix.py --hardware-pulsing --pwm-bits 8
    ```
 
-3. **Reserve a CPU core for the refresh thread.** The other big fix for
+4. **Reserve a CPU core for the refresh thread.** The other structural fix for
    jitter, and the library suggests it itself at startup. **This changes your
    boot configuration:** append `isolcpus=3` to the single line in
    `/boot/cmdline.txt` (do not add a new line), then reboot.
@@ -652,16 +669,15 @@ a time with `tune-matrix.py`, then persist the winner with `--save`:
    on a Pi 4. Close Chromium, or test over SSH with the desktop stopped
    (`sudo systemctl isolate multi-user.target`), before blaming the supply.
 
-4. **GPIO slowdown.** Longer chains sometimes need a different value. It is
+5. **GPIO slowdown.** Longer chains sometimes need a different value. It is
    cheap to try 3, 4 and 5 — lower is faster but less tolerant of long
    ribbons:
    ```bash
    sudo .venv/bin/python scripts/tune-matrix.py --slowdown 5 --pwm-bits 8
    ```
 
-5. **Cap the refresh rate.** Once you are comfortably above 100 Hz, pinning it
-   (`--limit-refresh 120`) makes the current draw steadier, which can itself
-   reduce flicker on a marginal supply.
+6. **Lower the brightness.** Beyond reducing current draw, it narrows the
+   range the PWM has to cover, so a marginal supply sags less.
 
 When a combination looks right:
 
