@@ -282,3 +282,58 @@ def test_runner_thread_starts_and_stops_cleanly(tmp_path):
         runner.join(timeout=5)
     assert not runner.is_alive()
     assert display.cleared >= 1
+
+
+# -- text folding ----------------------------------------------------------
+
+@pytest.mark.parametrize("raw,expected", [
+    ("MIN", "MIN"),
+    ("Montréal Canadiens", "Montreal Canadiens"),
+    ("Atlético Madrid", "Atletico Madrid"),
+    ("Bayern München", "Bayern Munchen"),
+    ("Beşiktaş", "Besiktas"),
+    ("Køge", "Koge"),
+    ("Saint-Étienne", "Saint-Etienne"),
+    ("", ""),
+])
+def test_non_ascii_names_fold_to_ascii(raw, expected):
+    """BDF bitmap fonts are ASCII-only; ESPN is not."""
+    from scoreboard.display.fonts import to_ascii
+
+    assert to_ascii(raw) == expected
+
+
+def test_unfoldable_characters_become_question_marks():
+    from scoreboard.display.fonts import to_ascii
+
+    folded = to_ascii("東京 FC")
+    assert folded.isascii() and "FC" in folded
+
+
+def test_fonts_measure_and_draw_non_ascii_text(tmp_path):
+    """A name with an accent must not reach Pillow's glyph table unfolded."""
+    from PIL import Image, ImageDraw
+
+    font_dir = tmp_path / "fonts"
+    font_dir.mkdir()
+    write_bdf(str(font_dir / "5x7.bdf"))
+    font = FontRegistry(cache_dir=str(tmp_path / "c"),
+                        search_dirs=[str(font_dir)]).get("small")
+
+    draw = ImageDraw.Draw(Image.new("RGB", (192, 32)))
+    for name in ("Montréal", "Atlético", "München"):
+        assert font.text_width(name) > 0
+        assert font.fit(name, 40).isascii()
+        font.draw(draw, (0, 0), name, (255, 255, 255))   # must not raise
+
+
+def test_layouts_handle_accented_team_names(render_context):
+    from scoreboard.display import layouts
+    from scoreboard.samples import sample_live_game
+
+    game = sample_live_game()
+    game.home.display_name = "Montréal Canadiens"
+    game.home.abbreviation = "MTL"
+    game.away.display_name = "Atlético Madrid"
+    image = layouts.render_featured(game, render_context)
+    assert image.size == (192, 32)

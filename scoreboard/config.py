@@ -96,6 +96,9 @@ class DisplayConfig:
     pwm_lsb_nanoseconds: int = 130
     limit_refresh_rate_hz: int = 0
     disable_hardware_pulsing: bool = True
+    #: Ask the library to print the achieved refresh rate. Invaluable when
+    #: chasing flicker: below roughly 100 Hz the panels visibly shimmer.
+    show_refresh_rate: bool = False
     show_logos: bool = True
     #: Unix user the process drops to once the matrix has been initialized.
     #: Empty means "stay as the current user" (used in preview mode).
@@ -128,6 +131,7 @@ class DisplayConfig:
             pwm_lsb_nanoseconds=_clamp_int(data.get("pwm_lsb_nanoseconds"), 50, 3000, 130),
             limit_refresh_rate_hz=_clamp_int(data.get("limit_refresh_rate_hz"), 0, 400, 0),
             disable_hardware_pulsing=_as_bool(data.get("disable_hardware_pulsing"), True),
+            show_refresh_rate=_as_bool(data.get("show_refresh_rate"), False),
             show_logos=_as_bool(data.get("show_logos"), True),
             run_as_user=str(data.get("run_as_user", "") or ""),
         )

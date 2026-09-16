@@ -17,6 +17,7 @@ from __future__ import annotations
 import glob
 import logging
 import os
+import unicodedata
 from dataclasses import dataclass
 from typing import Dict, List, Optional, Sequence, Tuple
 
@@ -44,6 +45,36 @@ TTF_CANDIDATES: Tuple[str, ...] = (
     "/usr/share/fonts/truetype/liberation/LiberationSans-Bold.ttf",
     "/usr/share/fonts/truetype/freefont/FreeSansBold.ttf",
 )
+
+
+#: Characters ESPN uses that have no ASCII equivalent under NFKD.
+_EXTRA_TRANSLITERATIONS = {
+    "\u00d8": "O", "\u00f8": "o", "\u0110": "D", "\u0111": "d",
+    "\u00c6": "AE", "\u00e6": "ae", "\u0152": "OE", "\u0153": "oe",
+    "\u00df": "ss", "\u00d0": "D", "\u00f0": "d", "\u00de": "TH",
+    "\u00fe": "th", "\u0141": "L", "\u0142": "l",
+    "\u2019": "'", "\u2018": "'", "\u201c": '"', "\u201d": '"',
+    "\u2013": "-", "\u2014": "-", "\u2026": "...", "\u00a0": " ",
+}
+
+
+def to_ascii(text: str) -> str:
+    """Fold text down to ASCII.
+
+    The BDF fonts that ship with rpi-rgb-led-matrix are ASCII-only. Pillow's
+    bitmap-font renderer indexes its glyph table by code point, so feeding it
+    "Montr\u00e9al Canadiens" or "Atl\u00e9tico" is undefined behaviour --
+    which is exactly the kind of name ESPN returns. Transliterating is also
+    simply more readable on a 32-pixel-tall panel than a missing glyph.
+    """
+    if not text:
+        return ""
+    if text.isascii():
+        return text
+    folded = "".join(_EXTRA_TRANSLITERATIONS.get(char, char) for char in text)
+    decomposed = unicodedata.normalize("NFKD", folded)
+    stripped = "".join(char for char in decomposed if not unicodedata.combining(char))
+    return "".join(char if ord(char) < 128 else "?" for char in stripped)
 
 
 @dataclass(frozen=True)
@@ -93,6 +124,7 @@ class Font:
             return 8
 
     def text_width(self, text: str) -> int:
+        text = to_ascii(text)
         if not text:
             return 0
         try:
@@ -111,6 +143,7 @@ class Font:
         between BDF and TrueType faces; normalizing here keeps layouts free
         of per-font fudge factors.
         """
+        text = to_ascii(text)
         if not text:
             return
         previous_mode = draw.fontmode
@@ -138,6 +171,7 @@ class Font:
 
     def fit(self, text: str, max_width: int) -> str:
         """Truncate ``text`` so it fits within ``max_width`` pixels."""
+        text = to_ascii(text)
         if self.text_width(text) <= max_width:
             return text
         for end in range(len(text) - 1, 0, -1):

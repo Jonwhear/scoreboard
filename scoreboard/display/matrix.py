@@ -100,6 +100,7 @@ class MatrixDisplay(Display):
         # hardware pulsing enabled is the usual cause of flicker unless the
         # sound module has been blacklisted.
         options.disable_hardware_pulsing = config.disable_hardware_pulsing
+        options.show_refresh_rate = config.show_refresh_rate
         # We drop privileges ourselves, to the account that owns the install,
         # rather than letting the library drop to 'daemon'.
         if hasattr(options, "drop_privileges"):

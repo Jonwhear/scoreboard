@@ -562,10 +562,89 @@ Start here:
 ./scripts/test-matrix.sh          # this project's panel test pattern
 ./scripts/test-matrix.sh demo     # hzeller's demo, same settings
 ./scripts/test-matrix.sh samples  # render layouts to PNGs, no hardware
+
+# Chasing flicker: drive the panels with settings passed on the command
+# line and print the refresh rate actually being achieved.
+sudo .venv/bin/python scripts/tune-matrix.py --help
 ```
 
 The test pattern draws a numbered, coloured border around each 64×32 panel
 plus a grey ramp. **Use it to tell software problems from hardware problems.**
+
+### Flicker, and why a third panel starts it
+
+This deserves its own section because it is the most common surprise: **two
+panels look fine, adding a third makes everything shimmer.**
+
+The library clocks the whole chain out serially, so three panels means three
+times as much data per frame as one. The achieved refresh rate falls
+accordingly, and below roughly 100 Hz your eye starts to see it — especially
+in peripheral vision, or through a phone camera.
+
+**First, decide whether it is timing or power.** These need completely
+different fixes, and guessing wastes the evening:
+
+```bash
+sudo .venv/bin/python scripts/tune-matrix.py --pattern pattern   # low current
+sudo .venv/bin/python scripts/tune-matrix.py --pattern white     # max current
+```
+
+The script prints the refresh rate the library is actually achieving.
+
+| What you see | Cause | Go to |
+| --- | --- | --- |
+| Both flicker about equally, refresh rate is low (< 100 Hz) | Timing | the tuning steps below |
+| `white` is far worse than `pattern`, or dropping brightness to 25 largely fixes it | **Power** | the hardware table further down |
+| Refresh rate is high (> 150 Hz) but it still flickers | **Power** | the hardware table further down |
+
+**Timing fixes, in descending order of how much they help.** Try them one at
+a time with `tune-matrix.py`, then persist the winner with `--save`:
+
+1. **Fewer PWM bits.** The single biggest lever — each bit you drop roughly
+   doubles the refresh rate. Scoreboard content is flat colour, so the lost
+   colour depth is essentially invisible:
+   ```bash
+   sudo .venv/bin/python scripts/tune-matrix.py --pwm-bits 8
+   sudo .venv/bin/python scripts/tune-matrix.py --pwm-bits 7   # if still not enough
+   ```
+
+2. **Hardware pulsing.** Much steadier timing, but it shares hardware with the
+   onboard sound, so that has to go first. **This changes your system:** it
+   disables the Pi's analogue/HDMI audio.
+   ```bash
+   echo "blacklist snd_bcm2835" | sudo tee /etc/modprobe.d/blacklist-rgb-matrix.conf
+   sudo update-initramfs -u
+   sudo reboot
+   # then:
+   sudo .venv/bin/python scripts/tune-matrix.py --hardware-pulsing --pwm-bits 8
+   ```
+
+3. **Reserve a CPU core for the refresh thread.** The library suggests this
+   itself at startup. **This changes your boot configuration:** append
+   `isolcpus=3` to the single line in `/boot/cmdline.txt` (do not add a new
+   line), then reboot. It stops the scheduler from interrupting the refresh
+   thread, which is a common cause of intermittent shimmer.
+
+4. **GPIO slowdown.** Longer chains sometimes need a different value. It is
+   cheap to try 3, 4 and 5 — lower is faster but less tolerant of long
+   ribbons:
+   ```bash
+   sudo .venv/bin/python scripts/tune-matrix.py --slowdown 5 --pwm-bits 8
+   ```
+
+5. **Cap the refresh rate.** Once you are comfortably above 100 Hz, pinning it
+   (`--limit-refresh 120`) makes the current draw steadier, which can itself
+   reduce flicker on a marginal supply.
+
+When a combination looks right:
+
+```bash
+sudo .venv/bin/python scripts/tune-matrix.py --pwm-bits 8 --slowdown 4 --save
+sudo systemctl restart sports-scoreboard
+```
+
+If nothing above gets you to a steady image, the answer is power — go to the
+hardware table below, and measure the voltage.
 
 ### Software symptoms — configuration is wrong
 
