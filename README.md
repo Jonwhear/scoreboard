@@ -582,35 +582,59 @@ accordingly, and below roughly 100 Hz your eye starts to see it — especially
 in peripheral vision, or through a phone camera.
 
 **First, decide whether it is timing or power.** These need completely
-different fixes, and guessing wastes the evening:
+different fixes, and guessing wastes the evening. Start with:
+
+```bash
+./scripts/diagnose.sh
+```
+
+which checks whether the Pi itself is being under-volted or throttled, what
+is competing for CPU, and which timing settings are actually in effect. Then
+measure the two extremes of current draw:
 
 ```bash
 sudo .venv/bin/python scripts/tune-matrix.py --pattern pattern   # low current
 sudo .venv/bin/python scripts/tune-matrix.py --pattern white     # max current
 ```
 
-The script prints the refresh rate the library is actually achieving.
+The library prints the refresh rate it is achieving, as
+`157.3Hz (lowest: 112.6Hz)`.
+
+**Read the spread, not just the average.** This is the part that is easy to
+get wrong. A rock-steady 120 Hz looks fine; a rate swinging between 112 and
+157 Hz flickers badly, because the modulation period keeps changing. So:
 
 | What you see | Cause | Go to |
 | --- | --- | --- |
-| Both flicker about equally, refresh rate is low (< 100 Hz) | Timing | the tuning steps below |
-| `white` is far worse than `pattern`, or dropping brightness to 25 largely fixes it | **Power** | the hardware table further down |
-| Refresh rate is high (> 150 Hz) but it still flickers | **Power** | the hardware table further down |
+| Average below ~100 Hz | Timing — not enough refresh | steps 1 and 4 below |
+| **Wide gap between the current rate and the `lowest` figure** (say 112 vs 157) | Timing — *jitter*, something is interrupting the refresh thread | steps 2 and 3 below |
+| Rate is high **and steady**, and it still flickers | **Power** | the hardware table further down |
+| `white` far worse than `pattern`, or brightness 25 largely fixes it | **Power** | the hardware table further down |
+| `./scripts/diagnose.sh` reports any under-voltage | **Power — the Pi's own supply** | give the Pi its own adequate supply |
+
+Note the last one: an under-volted *Pi* throttles its CPU, which destabilises
+the refresh thread. That shows up as jitter, so power and timing symptoms can
+masquerade as each other. `vcgencmd get_throttled` returning `0x0` rules the
+Pi's own supply out — but says nothing about the separate supply feeding the
+panels, which still needs measuring at the far panel's terminals.
 
 **Timing fixes, in descending order of how much they help.** Try them one at
 a time with `tune-matrix.py`, then persist the winner with `--save`:
 
-1. **Fewer PWM bits.** The single biggest lever — each bit you drop roughly
-   doubles the refresh rate. Scoreboard content is flat colour, so the lost
-   colour depth is essentially invisible:
+1. **Fewer PWM bits.** Raises the average — each bit you drop roughly doubles
+   the refresh rate. Only worth doing if the average is low; it does not help
+   jitter. Scoreboard content is flat colour, so the lost colour depth is
+   essentially invisible:
    ```bash
    sudo .venv/bin/python scripts/tune-matrix.py --pwm-bits 8
    sudo .venv/bin/python scripts/tune-matrix.py --pwm-bits 7   # if still not enough
    ```
 
-2. **Hardware pulsing.** Much steadier timing, but it shares hardware with the
-   onboard sound, so that has to go first. **This changes your system:** it
-   disables the Pi's analogue/HDMI audio.
+2. **Hardware pulsing.** The best fix for *jitter*: it moves the bit timing
+   onto a hardware timer instead of a software loop the scheduler can
+   interrupt. It shares hardware with the onboard sound, so that has to go
+   first. **This changes your system:** it disables the Pi's analogue/HDMI
+   audio.
    ```bash
    echo "blacklist snd_bcm2835" | sudo tee /etc/modprobe.d/blacklist-rgb-matrix.conf
    sudo update-initramfs -u
@@ -619,11 +643,14 @@ a time with `tune-matrix.py`, then persist the winner with `--save`:
    sudo .venv/bin/python scripts/tune-matrix.py --hardware-pulsing --pwm-bits 8
    ```
 
-3. **Reserve a CPU core for the refresh thread.** The library suggests this
-   itself at startup. **This changes your boot configuration:** append
-   `isolcpus=3` to the single line in `/boot/cmdline.txt` (do not add a new
-   line), then reboot. It stops the scheduler from interrupting the refresh
-   thread, which is a common cause of intermittent shimmer.
+3. **Reserve a CPU core for the refresh thread.** The other big fix for
+   jitter, and the library suggests it itself at startup. **This changes your
+   boot configuration:** append `isolcpus=3` to the single line in
+   `/boot/cmdline.txt` (do not add a new line), then reboot.
+
+   Related and free: a desktop session with a browser open steals a lot of CPU
+   on a Pi 4. Close Chromium, or test over SSH with the desktop stopped
+   (`sudo systemctl isolate multi-user.target`), before blaming the supply.
 
 4. **GPIO slowdown.** Longer chains sometimes need a different value. It is
    cheap to try 3, 4 and 5 — lower is faster but less tolerant of long
