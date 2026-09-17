@@ -342,3 +342,140 @@ def test_layouts_handle_accented_team_names(render_context):
     game.away.display_name = "Atlético Madrid"
     image = layouts.render_featured(game, render_context)
     assert image.size == (render_context.width, render_context.height)
+
+
+# -- the rgbmatrix binding's fast-blit incompatibility ---------------------
+
+class _FakeCanvas:
+    """Mimics the bindings' Canvas, including the 32-bit pointer failure.
+
+    Older rpi-rgb-led-matrix bindings hand Pillow's internal buffer pointer
+    to C. On armv7l any buffer above 2GB arrives as a negative Python int
+    and the conversion raises OverflowError -- which is what a Raspberry Pi
+    running 32-bit Raspberry Pi OS actually does, mid-run.
+    """
+
+    def __init__(self, fast_works=False, supports_unsafe_kwarg=True):
+        self.fast_works = fast_works
+        self.supports_unsafe_kwarg = supports_unsafe_kwarg
+        self.fast_calls = 0
+        self.safe_calls = 0
+        self.pixels = {}
+
+    def SetImage(self, image, offset_x=0, offset_y=0, unsafe=True):
+        if unsafe:
+            self.fast_calls += 1
+            if not self.fast_works:
+                raise OverflowError("can't convert negative value to size_t")
+            return
+        if not self.supports_unsafe_kwarg:
+            raise TypeError("SetImage() takes at most 3 positional arguments")
+        self.safe_calls += 1
+
+    def SetPixel(self, x, y, r, g, b):
+        self.pixels[(x, y)] = (r, g, b)
+
+
+class _FakeMatrix:
+    def __init__(self, canvas):
+        self.canvas = canvas
+        self.swaps = 0
+
+    def SwapOnVSync(self, canvas):
+        self.swaps += 1
+        return canvas
+
+    def Clear(self):
+        pass
+
+
+def _matrix_display_with(canvas, chain=2):
+    from scoreboard.display.matrix import MatrixDisplay
+
+    display = MatrixDisplay(DisplayConfig(chain_length=chain))
+    display._matrix = _FakeMatrix(canvas)
+    display._canvas = canvas
+    return display
+
+
+def _frame(display, value=10):
+    return Image.new("RGB", (display.width, display.height), (value, value + 1, value + 2))
+
+
+def test_fast_blit_is_used_when_it_works():
+    canvas = _FakeCanvas(fast_works=True)
+    display = _matrix_display_with(canvas)
+    display.show(_frame(display))
+    assert canvas.fast_calls == 1 and canvas.safe_calls == 0
+    assert display._matrix.swaps == 1
+
+
+def test_overflow_error_falls_back_and_keeps_drawing():
+    """The exact failure seen on 32-bit Raspberry Pi OS."""
+    canvas = _FakeCanvas(fast_works=False)
+    display = _matrix_display_with(canvas)
+
+    display.show(_frame(display, 10))       # fast path raises, falls back
+    assert canvas.fast_calls == 1
+    assert canvas.safe_calls == 1, "must fall back rather than drop the frame"
+    assert display._matrix.swaps == 1
+
+    display.show(_frame(display, 20))       # and must not retry the broken path
+    assert canvas.fast_calls == 1
+    assert canvas.safe_calls == 2
+    assert display._matrix.swaps == 2
+
+
+def test_fallback_is_logged_once_not_every_frame(caplog):
+    canvas = _FakeCanvas(fast_works=False)
+    display = _matrix_display_with(canvas)
+    with caplog.at_level("WARNING"):
+        for value in range(5):
+            display.show(_frame(display, value * 10))
+    warnings = [r for r in caplog.records if "fast image path" in r.message]
+    assert len(warnings) == 1, "a per-frame warning would flood the journal"
+
+
+def test_ancient_bindings_fall_back_to_per_pixel_writes():
+    canvas = _FakeCanvas(fast_works=False, supports_unsafe_kwarg=False)
+    display = _matrix_display_with(canvas)
+    display.show(_frame(display, 40))
+    assert canvas.pixels, "should have written pixels directly"
+    assert len(canvas.pixels) == display.width * display.height
+    assert canvas.pixels[(0, 0)] == (40, 41, 42)
+    assert canvas.pixels[(display.width - 1, display.height - 1)] == (40, 41, 42)
+
+
+def test_identical_frames_are_not_re_sent():
+    canvas = _FakeCanvas(fast_works=True)
+    display = _matrix_display_with(canvas)
+    frame = _frame(display, 7)
+    for _ in range(4):
+        display.show(frame)
+    assert canvas.fast_calls == 1, "the panels already hold that frame"
+    display.show(_frame(display, 8))
+    assert canvas.fast_calls == 2
+
+
+def test_clear_forces_the_next_frame_to_be_sent():
+    canvas = _FakeCanvas(fast_works=True)
+    display = _matrix_display_with(canvas)
+    frame = _frame(display, 7)
+    display.show(frame)
+    display.clear()
+    display.show(frame)
+    assert canvas.fast_calls == 2, "after a clear the panels no longer hold it"
+
+
+def test_mismatched_frame_is_resized_before_blitting():
+    canvas = _FakeCanvas(fast_works=True)
+    display = _matrix_display_with(canvas, chain=2)
+    display.show(Image.new("RGB", (192, 32), (5, 5, 5)))
+    assert canvas.fast_calls == 1
+
+
+def test_non_rgb_frames_are_converted():
+    canvas = _FakeCanvas(fast_works=False, supports_unsafe_kwarg=False)
+    display = _matrix_display_with(canvas)
+    display.show(Image.new("RGBA", (display.width, display.height), (9, 8, 7, 255)))
+    assert canvas.pixels[(0, 0)] == (9, 8, 7)

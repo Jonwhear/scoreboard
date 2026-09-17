@@ -36,6 +36,10 @@ class MatrixDisplay(Display):
         self._matrix: Optional[Any] = None
         self._canvas: Optional[Any] = None
         self._brightness = config.brightness
+        #: The bindings' fast blit reads Pillow's internal buffer pointer.
+        #: We start with it and drop to the supported path if it breaks.
+        self._fast_blit = True
+        self._last_frame: Optional[bytes] = None
 
     # -- lifecycle -------------------------------------------------------
 
@@ -115,8 +119,64 @@ class MatrixDisplay(Display):
         image = self._check_size(image)
         if image.mode != "RGB":
             image = image.convert("RGB")
-        self._canvas.SetImage(image)
+
+        # The panels hold the last swapped frame, so re-sending an identical
+        # one buys nothing. Scoreboard content is static between updates, so
+        # this skips the large majority of blits.
+        frame = image.tobytes()
+        if frame == self._last_frame:
+            return
+        self._last_frame = frame
+
+        self._blit(image)
         self._canvas = self._matrix.SwapOnVSync(self._canvas)
+
+    def _blit(self, image: Image.Image) -> None:
+        """Copy a frame into the back buffer, the fastest way that works.
+
+        ``SetImage(..., unsafe=True)`` -- the default -- hands the binding
+        Pillow's internal image pointer. Older bindings convert that pointer
+        to an unsigned C type, and on a 32-bit system (armv7l Raspberry Pi
+        OS) any buffer allocated above 2GB has its high bit set, arrives as
+        a negative Python int, and raises::
+
+            OverflowError: can't convert negative value to size_t
+
+        It is address-dependent, so it can work for minutes and then fail
+        for the rest of the run. The binding's documented ``unsafe=False``
+        path does not touch Pillow's internals and is fast enough here:
+        a 128x32 canvas is 4096 pixels, a few milliseconds a frame.
+        """
+        if self._fast_blit:
+            try:
+                self._canvas.SetImage(image)
+                return
+            except (OverflowError, SystemError, ValueError, TypeError) as exc:
+                self._fast_blit = False
+                log.warning(
+                    "The matrix bindings' fast image path failed (%s: %s); switching to "
+                    "the supported per-pixel path for the rest of this run. This is a "
+                    "known incompatibility between older rpi-rgb-led-matrix bindings "
+                    "and Pillow on 32-bit systems, not a fault in your wiring.",
+                    type(exc).__name__, exc,
+                )
+        self._safe_blit(image)
+
+    def _safe_blit(self, image: Image.Image) -> None:
+        """``SetImage`` without the pointer trick, with a manual last resort."""
+        try:
+            self._canvas.SetImage(image, 0, 0, False)
+            return
+        except TypeError:
+            pass  # bindings predating the 'unsafe' argument
+        except (OverflowError, SystemError, ValueError):
+            log.debug("SetImage(unsafe=False) failed too; writing pixels directly")
+
+        canvas, pixels = self._canvas, image.load()
+        for y in range(min(self.height, image.height)):
+            for x in range(min(self.width, image.width)):
+                red, green, blue = pixels[x, y][:3]
+                canvas.SetPixel(x, y, red, green, blue)
 
     def set_brightness(self, brightness: int) -> None:
         brightness = max(1, min(100, int(brightness)))
@@ -131,6 +191,7 @@ class MatrixDisplay(Display):
             log.exception("Could not change matrix brightness")
 
     def clear(self) -> None:
+        self._last_frame = None
         if self._matrix is not None:
             try:
                 self._matrix.Clear()

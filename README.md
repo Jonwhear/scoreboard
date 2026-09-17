@@ -797,6 +797,39 @@ Checks, in order of how often they are the answer:
 software.** The application logs matrix errors and keeps drawing; it will not
 mask a failing supply.
 
+### `OverflowError: can't convert negative value to size_t`
+
+Seen in the journal as a repeating traceback ending in
+`rgbmatrix.core.Canvas.SetPixelsPillow`, with `Display backend rejected a
+frame` after it. **This is a fault in the bindings, not in your wiring or
+this application, and it is handled automatically** — one warning is logged
+and the display carries on.
+
+What causes it: `SetImage`'s default fast path hands the binding a pointer
+to Pillow's internal image buffer. Older bindings convert that pointer to an
+unsigned C type; on a 32-bit system (armv7l Raspberry Pi OS) any buffer
+allocated above 2GB has its high bit set, so Python sees a negative integer
+and the conversion fails. It is address-dependent, which is why it can work
+for minutes — or work in a short test script and fail in the long-running
+service — and then never recover.
+
+`scoreboard/display/matrix.py` catches it, switches to the binding's
+supported `unsafe=False` path for the rest of the run, and logs one warning
+rather than a traceback per frame. The fallback costs a few milliseconds a
+frame on a 128x32 canvas, and identical frames are not re-sent at all, so
+the difference is not measurable in practice.
+
+To remove the cause rather than work around it, rebuild the bindings against
+your current Pillow:
+
+```bash
+cd ~/rpi-rgb-led-matrix/bindings/python
+sudo make install-python PYTHON=$(which python3)
+```
+
+A 64-bit OS also avoids it outright, since 64-bit pointers never overflow
+into negative here.
+
 ### Application symptoms
 
 | Symptom | Cause |
