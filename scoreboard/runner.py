@@ -1,6 +1,6 @@
 """The display loop.
 
-Renders the current screen to a 192x32 image, hands it to whichever
+Renders the current screen to a canvas-sized image, hands it to whichever
 :class:`~scoreboard.display.base.Display` backend is in use, and publishes
 the same frame for the web preview.  This thread owns the rotation state.
 

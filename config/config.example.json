@@ -2,7 +2,7 @@
   "display": {
     "rows": 32,
     "cols": 64,
-    "chain_length": 3,
+    "chain_length": 2,
     "parallel": 1,
     "gpio_mapping": "adafruit-hat",
     "slowdown_gpio": 4,
@@ -15,7 +15,12 @@
     "run_as_user": ""
   },
   "sports": {
-    "enabled_leagues": ["nfl", "mlb", "nhl", "nba"],
+    "enabled_leagues": [
+      "nfl",
+      "mlb",
+      "nhl",
+      "nba"
+    ],
     "favorite_teams": []
   },
   "rotation": {

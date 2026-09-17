@@ -92,10 +92,12 @@ def test_index_page_renders(client):
     assert b"preview" in response.data
 
 
-def test_status_reports_matrix_configuration(client):
+def test_status_reports_matrix_configuration(client, services):
     payload = client.get("/api/status").get_json()
-    assert payload["matrix"]["chain_length"] == 3
-    assert payload["matrix"]["canvas"] == "192x32"
+    display = services.config_store.config.display
+    assert payload["matrix"]["chain_length"] == display.chain_length
+    assert payload["matrix"]["canvas"] == f"{display.width}x{display.height}"
+    assert payload["matrix"]["cols"] == 64 and payload["matrix"]["rows"] == 32
     assert payload["matrix"]["gpio_mapping"] == "adafruit-hat"
     assert "uptime_seconds" in payload and "screen" in payload
     assert payload["version"] == "test"
@@ -232,7 +234,8 @@ def test_preview_returns_the_current_framebuffer(client, services, render_contex
 
     from PIL import Image
     import io
-    assert Image.open(io.BytesIO(response.data)).size == (192, 32)
+    display = services.config_store.config.display
+    assert Image.open(io.BytesIO(response.data)).size == (display.width, display.height)
 
 
 def test_force_next_screen(client, services):

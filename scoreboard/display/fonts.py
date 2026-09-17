@@ -1,4 +1,4 @@
-"""Font loading for a 192x32 canvas.
+"""Font loading for a 32-pixel-tall LED canvas.
 
 Layouts ask for a *role* ("small", "score", ...) rather than a file, and the
 registry resolves it against whatever is available, in order:

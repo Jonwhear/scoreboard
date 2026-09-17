@@ -1,12 +1,28 @@
 # Sports Scoreboard
 
 A local, self-contained sports scoreboard for a Raspberry Pi driving three
-chained 64×32 HUB75 LED matrices (a 192×32 canvas) through an Adafruit RGB
-Matrix Bonnet.
+chained 64×32 HUB75 LED matrices (a 128×32 canvas) through an Adafruit RGB
+Matrix Bonnet. The chain length is configuration, not code — one, two, three
+or more panels all work, and every layout adapts to the canvas it is given.
 
 It fetches live scores, prioritises your favourite teams, draws them on the
 panels, and is configured from a phone or laptop on your own Wi-Fi. No cloud
 account, no API key, nothing exposed to the internet.
+
+Two panels — the default:
+
+```
+┌───────────────────────────────────────┐
+│              Q3   4:23                │
+├───────────────────┬───────────────────┤
+│       MIN         │        GB         │
+│ [logo]       24   │   17      [logo]  │
+└───────────────────┴───────────────────┘
+       panel 1             panel 2
+```
+
+Three panels, if your 5 V supply can feed them (see the power warning) — the
+status gets a column of its own:
 
 ```
 ┌─────────────────┬─────────────────┬─────────────────┐
@@ -68,8 +84,8 @@ account, no API key, nothing exposed to the internet.
 | Computer | Raspberry Pi 4 |
 | OS | Raspberry Pi OS Buster (Python 3.7) or newer, 32- or 64-bit |
 | HAT | Adafruit RGB Matrix Bonnet (product 3211) |
-| Panels | 3 × HUB75 64×32, chained horizontally |
-| Logical canvas | 192 × 32 |
+| Panels | 2 × HUB75 64×32, chained horizontally (3 supported) |
+| Logical canvas | 128 × 32 (64 × panels) |
 | GPIO mapping | `adafruit-hat` |
 | GPIO slowdown | `4` |
 | Driver | [hzeller/rpi-rgb-led-matrix](https://github.com/hzeller/rpi-rgb-led-matrix), already installed |
@@ -77,12 +93,20 @@ account, no API key, nothing exposed to the internet.
 ### Wiring
 
 The panels are chained **output → input**: the bonnet's HUB75 socket goes to
-panel 1's *input*, panel 1's *output* to panel 2's *input*, panel 2's *output*
-to panel 3's *input*. The library then treats the chain as one 192×32 canvas.
+panel 1's *input*, and panel 1's *output* to panel 2's *input* (and so on for
+a longer chain). The library then treats the chain as one wide canvas.
 
-This project configures the library as `cols=64, chain_length=3`. It is **not**
-configured as a single 192-wide panel, because that is not what the hardware
+This project configures the library as `cols=64, chain_length=2`. It is **not**
+configured as a single 128-wide panel, because that is not what the hardware
 is and the library addresses each panel separately.
+
+To change the number of panels, set `display.chain_length` — every layout,
+the rotation grouping and the web preview follow it:
+
+```bash
+sudo .venv/bin/python scripts/tune-matrix.py --chain 3 --save
+sudo systemctl restart sports-scoreboard
+```
 
 ---
 
@@ -91,11 +115,16 @@ is and the library addresses each panel separately.
 **Do not power the LED panels from the Raspberry Pi.**
 
 A 64×32 HUB75 panel can draw around **2–4 A at 5 V** with a bright, full-white
-image. Three of them is a realistic worst case of **8–12 A**. The Pi's own
-supply cannot do this, and the Pi's 5 V rail is not designed to pass it.
+image. Two of them is a realistic worst case of **4–8 A**, three is **6–12 A**.
+The Pi's own supply cannot do this, and the Pi's 5 V rail is not designed to
+pass it.
+
+This is the usual reason a chain that works at two panels misbehaves at three:
+the supply runs out before the software does.
 
 * Use a dedicated, quality **5 V supply rated well above your worst case** —
-  a 5 V / 15 A or larger supply for three panels is sensible headroom.
+  a 5 V / 10 A supply for two panels, or 15 A or larger for three, is sensible
+  headroom.
 * Feed power **to each panel's own screw terminals**, not by daisy-chaining
   thin power leads from panel to panel. Use proper distribution and adequate
   wire gauge; thin or long runs cause voltage drop.
@@ -157,10 +186,10 @@ at boot, `--now` = also start it immediately).
 should show, in order:
 
 ```
-Initializing matrix: 64x32 per panel, chain=3, ... -> 192x32 canvas
-Matrix initialized (192x32)
+Initializing matrix: 64x32 per panel, chain=2, ... -> 128x32 canvas
+Matrix initialized (128x32)
 Dropped privileges to pi (uid=1000 gid=1000)
-Leagues enabled: nfl, mlb, nhl, nba | favourites: 0 | canvas 192x32 | backend matrix
+Leagues enabled: nfl, mlb, nhl, nba | favourites: 0 | canvas 128x32 | backend matrix
 Web UI on http://0.0.0.0:8080
 ```
 
@@ -317,7 +346,7 @@ It shows:
 * **Status** — running state, sports-data health, last successful update,
   which screen is on the panels right now, matrix configuration, uptime,
   which font file each text size resolved to, logo cache statistics
-* **Preview** — the live 192×32 framebuffer, upscaled with nearest-neighbour
+* **Preview** — the live framebuffer, upscaled with nearest-neighbour
   so individual LED pixels stay visible, refreshed once a second
 * **Favourites** — searchable team picker per league, with logos; stored by
   stable league + team id, never by name
@@ -462,7 +491,7 @@ Four participants, one shared state object, no thread ever waiting on another:
   │ DisplayRunner│ ◄──────────────── │              │
   │   (thread)   │                   └──────────────┘
   │              │                          ▲
-  │  rotation →  │  192×32 image            │ reads
+  │  rotation →  │  the frame               │ reads
   │  layouts  →  │ ───────► Display ──► LEDs│
   │              │ ───────► preview PNG     │
   └──────────────┘                   ┌──────────────┐
@@ -486,7 +515,7 @@ Layer boundaries that matter:
 | `providers/espn.py` | ESPN's JSON and URLs | rendering, config, threads |
 | `models.py` | normalised games | any provider |
 | `rotation.py` | games, config | Pillow, rgbmatrix |
-| `display/layouts.py` | a 192×32 canvas | rgbmatrix, HTTP, ESPN |
+| `display/layouts.py` | a 64·N × 32 canvas | rgbmatrix, HTTP, ESPN |
 | `display/matrix.py` | rgbmatrix | layouts, games |
 | `web/` | config + state | how anything is drawn |
 
@@ -530,7 +559,7 @@ The settings in `config.json` map onto the library's options like this:
 | --- | --- | --- |
 | `rows` | `--led-rows` | 32 |
 | `cols` | `--led-cols` | 64 |
-| `chain_length` | `--led-chain` | 3 |
+| `chain_length` | `--led-chain` | 2 |
 | `parallel` | `--led-parallel` | 1 |
 | `gpio_mapping` | `--led-gpio-mapping` | `adafruit-hat` |
 | `slowdown_gpio` | `--led-slowdown-gpio` | 4 |
@@ -545,7 +574,7 @@ The equivalent known-good `demo` invocation for this chain:
 ```bash
 cd ~/rpi-rgb-led-matrix/examples-api-use
 sudo ./demo -D 0 \
-  --led-rows=32 --led-cols=64 --led-chain=3 \
+  --led-rows=32 --led-cols=64 --led-chain=2 \
   --led-gpio-mapping=adafruit-hat --led-slowdown-gpio=4
 ```
 
@@ -576,8 +605,8 @@ plus a grey ramp. **Use it to tell software problems from hardware problems.**
 This deserves its own section because it is the most common surprise: **two
 panels look fine, adding a third makes everything shimmer.**
 
-The library clocks the whole chain out serially, so three panels means three
-times as much data per frame as one. The achieved refresh rate falls
+The library clocks the whole chain out serially, so each panel you add is
+another panel's worth of data per frame. The achieved refresh rate falls
 accordingly, and below roughly 100 Hz your eye starts to see it — especially
 in peripheral vision, or through a phone camera.
 
@@ -724,8 +753,8 @@ These are wrong from the very first frame and are always wrong the same way.
 
 | Symptom | Cause | Fix |
 | --- | --- | --- |
-| Only the first panel lights; the rest are dark | `chain_length` too low | Set `chain_length: 3` |
-| Image repeats three times across the chain | Configured as one wide panel | Use `cols: 64` + `chain_length: 3`, **not** `cols: 192` |
+| Only the first panel lights; the rest are dark | `chain_length` too low | Set it to your actual panel count |
+| Image repeats on every panel | Configured as one wide panel | Use `cols: 64` plus `chain_length: N`, **not** `cols: 128` |
 | Panel numbers appear out of order | Chain wired in a different order | Re-cable output→input, or reorder physically |
 | Image split/interleaved vertically, garbled halves | Wrong `rows`, or a 1/8-scan panel | Check the panel's scan rate; `rows` must match |
 | Nothing lights at all, no errors | Wrong `gpio_mapping` | `adafruit-hat`, or `adafruit-hat-pwm` **only** if you soldered the E/4 jumper |
@@ -840,7 +869,7 @@ sports-scoreboard/
 │   │   ├── base.py              Display interface
 │   │   ├── matrix.py            rgbmatrix backend
 │   │   ├── preview.py           image backend (browser preview, dev)
-│   │   ├── layouts.py           layouts A–E on a 192×32 canvas
+│   │   ├── layouts.py           layouts A–E, any chain length
 │   │   └── fonts.py             BDF → TTF → built-in font resolution
 │   ├── assets/fonts/            drop extra .bdf files here
 │   └── web/                     Flask app, JSON API, HTML/CSS/JS

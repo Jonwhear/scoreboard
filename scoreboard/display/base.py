@@ -17,7 +17,7 @@ log = logging.getLogger(__name__)
 
 
 class Display(abc.ABC):
-    """Something that can show a 192x32 (or however configured) RGB frame."""
+    """Something that can show a canvas-sized RGB frame."""
 
     backend_name = "base"
 
@@ -56,7 +56,7 @@ class NullDisplay(Display):
 
     backend_name = "null"
 
-    def __init__(self, width: int = 192, height: int = 32) -> None:
+    def __init__(self, width: int = 128, height: int = 32) -> None:
         super().__init__(width, height)
         self.last_image: Optional[Image.Image] = None
         self.frame_count = 0

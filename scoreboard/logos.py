@@ -1,6 +1,6 @@
 """Team logo download, processing and caching.
 
-Rules that matter for a 192x32 display:
+Rules that matter for a 32-pixel-tall display:
 
 * The render loop must never block on the network.  ``get`` returns whatever
   is already cached and queues a download for anything that is not; the

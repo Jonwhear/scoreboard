@@ -13,7 +13,8 @@ from scoreboard.rotation import Layout, ScreenItem, ScreenKind
 from scoreboard.samples import (sample_card_games, sample_final_games,
                                 sample_live_game, sample_upcoming_games)
 
-CANVAS = (192, 32)
+#: The default canvas: two chained 64x32 panels.
+CANVAS = (128, 32)
 
 
 def assert_canvas(image):
@@ -112,6 +113,59 @@ def test_canvas_width_follows_chain_length(fonts, chain, expected):
     assert image.size == (expected, 32)
 
 
+@pytest.mark.parametrize("chain", [1, 2, 3, 4])
+def test_every_layout_renders_at_every_chain_length(fonts, chain):
+    """A two-panel chain is a supported build, not a degraded one.
+
+    Before this existed, the featured layout carved the canvas into three
+    fixed 64px zones, so on two panels the centre zone inverted and the
+    status text was drawn on top of the scores.
+    """
+    width = 64 * chain
+    context = RenderContext(fonts=fonts, logos=None, show_logos=False,
+                            width=width, height=32)
+    renders = [
+        layouts.render_featured(sample_live_game(), context),
+        layouts.render_featured(sample_final_games()[0], context),
+        layouts.render_featured(sample_upcoming_games()[0], context),
+        layouts.render_cards(sample_card_games(), context),
+        layouts.render_upcoming(sample_upcoming_games(), context),
+        layouts.render_upcoming(sample_upcoming_games()[:1], context),
+        layouts.render_finals(sample_final_games(), context),
+        layouts.render_finals(sample_final_games()[:1], context),
+        layouts.render_idle(context),
+        layouts.render_idle(context, next_game=sample_upcoming_games()[0]),
+        layouts.render_test_pattern(context),
+        layouts.render_message(context, "SCOREBOARD", "starting"),
+    ]
+    for image in renders:
+        assert image.size == (width, 32)
+        assert image.mode == "RGB"
+
+
+@pytest.mark.parametrize("chain", [2, 3])
+def test_featured_draws_within_its_canvas(fonts, chain):
+    """Nothing may spill past the last column of the canvas."""
+    width = 64 * chain
+    context = RenderContext(fonts=fonts, logos=None, show_logos=False,
+                            width=width, height=32)
+    image = layouts.render_featured(sample_live_game(), context)
+    assert lit_pixels(image) > 100, "the frame should not be nearly blank"
+
+
+def test_two_panel_featured_separates_the_two_scores(fonts):
+    """The two halves' scores must not run together into one number."""
+    context = RenderContext(fonts=fonts, logos=None, show_logos=False,
+                            width=128, height=32)
+    image = layouts.render_featured(sample_live_game(), context)
+    # The centre column plus a pixel either side must stay unlit apart from
+    # the divider itself, which is drawn in the faint colour.
+    for x in (62, 66):
+        column = [image.getpixel((x, y)) for y in range(10, 32)]
+        assert all(pixel == (0, 0, 0) for pixel in column), \
+            f"column {x} should be clear of the scores"
+
+
 # -- logos -----------------------------------------------------------------
 
 class BrokenLogoCache:
@@ -169,7 +223,8 @@ def test_stale_data_is_marked_without_relying_on_colour_alone(fonts):
                                               stale=False))
     stale = layouts.render_idle(RenderContext(fonts=fonts, logos=None, show_logos=False,
                                               stale=True))
-    assert stale.getpixel((191, 0)) != fresh.getpixel((191, 0))
+    corner = (stale.width - 1, 0)
+    assert stale.getpixel(corner) != fresh.getpixel(corner)
     assert lit_pixels(stale) > lit_pixels(fresh)
 
 
@@ -217,7 +272,7 @@ def test_font_fit_truncates_long_text(fonts):
 def test_nearest_neighbour_scaling_keeps_hard_pixel_edges(render_context):
     image = layouts.render_test_pattern(render_context)
     scaled = scale_nearest(image, 4)
-    assert scaled.size == (768, 128)
+    assert scaled.size == (image.width * 4, image.height * 4)
     # Every pixel of a 4x block must be identical under nearest-neighbour.
     for dx in range(4):
         for dy in range(4):
@@ -228,3 +283,23 @@ def test_png_encoding(render_context):
     png = to_png_bytes(layouts.render_idle(render_context), scale=2)
     assert png.startswith(b"\x89PNG")
     assert len(png) > 100
+
+
+@pytest.mark.parametrize("chain", [1, 2])
+def test_single_game_screens_use_the_compact_design_when_narrow(fonts, chain):
+    """The single-game upcoming/final screens had their own 3-zone copy.
+
+    Without this they drew the away/status/home split on a canvas too narrow
+    to hold it, and the centre text landed on top of the scores.
+    """
+    width = 64 * chain
+    context = RenderContext(fonts=fonts, logos=None, show_logos=False,
+                            width=width, height=32)
+    for image in (layouts.render_upcoming(sample_upcoming_games()[:1], context),
+                  layouts.render_finals(sample_final_games()[:1], context)):
+        assert image.size == (width, 32)
+        # The compact design keeps a clear gutter down the middle.
+        if chain == 2:
+            for x in (62, 66):
+                column = [image.getpixel((x, y)) for y in range(12, 32)]
+                assert all(pixel == (0, 0, 0) for pixel in column)

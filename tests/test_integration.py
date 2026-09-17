@@ -62,8 +62,8 @@ class FixtureClient:
 class CapturingDisplay(Display):
     backend_name = "capture"
 
-    def __init__(self):
-        super().__init__(192, 32)
+    def __init__(self, width=128, height=32):
+        super().__init__(width, height)
         self.frames = []
 
     def show(self, image):
@@ -115,8 +115,9 @@ def test_poll_renders_and_serves_a_preview(stack):
     assert {game.league for game in games} == {"nfl", "mlb"}
 
     stack["runner"]._tick(time.monotonic())
-    frame = stack["display"].frames[-1]
-    assert frame.size == (192, 32)
+    display = stack["display"]
+    frame = display.frames[-1]
+    assert frame.size == (display.width, display.height)
 
     # The favourite's live game must win the rotation.
     screen = stack["state"].screen
@@ -127,7 +128,7 @@ def test_poll_renders_and_serves_a_preview(stack):
     response = stack["web"].get("/api/preview.png")
     assert response.status_code == 200
     served = Image.open(io.BytesIO(response.data))
-    assert served.size == (192, 32)
+    assert served.size == (display.width, display.height)
     assert served.tobytes() == frame.convert("RGB").tobytes(), \
         "the browser preview must be the exact framebuffer sent to the LEDs"
 
@@ -155,8 +156,9 @@ def test_going_offline_keeps_the_last_good_data(stack):
     assert stack["state"].any_stale is True
     assert interval > 0
 
+    display = stack["display"]
     stack["runner"]._tick(time.monotonic() + 10)
-    assert stack["display"].frames[-1].size == (192, 32)
+    assert display.frames[-1].size == (display.width, display.height)
     assert stack["web"].get("/api/status").get_json()["stale"] is True
 
 

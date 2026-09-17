@@ -27,6 +27,8 @@ from .models import Game
 
 log = logging.getLogger(__name__)
 
+#: Fallback when no display geometry is available (tests constructing a
+#: playlist directly). Real callers pass the configured chain length.
 GAMES_PER_CARD_SCREEN = 3
 
 
@@ -43,7 +45,7 @@ class ScreenKind(str, Enum):
 class Layout(str, Enum):
     """Which renderer draws the screen."""
 
-    FEATURED = "featured"   # layout A: one game across all three panels
+    FEATURED = "featured"   # layout A: one game across the whole canvas
     CARDS = "cards"         # layout B: one game per 64x32 panel
     UPCOMING = "upcoming"   # layout C
     FINAL = "final"         # layout D
@@ -120,6 +122,9 @@ def build_playlist(
     favorites = favorite_keys if favorite_keys is not None else config.sports.favorite_keys
     enabled = set(config.sports.enabled_leagues)
 
+    # One card per physical panel, so a two-panel chain shows two games per
+    # screen rather than silently dropping the third.
+    per_screen = max(1, config.display.chain_length)
     eligible = [game for game in games if game.league in enabled]
     fav_games = [game for game in eligible if game.involves_any(favorites)]
     other_games = [game for game in eligible if not game.involves_any(favorites)]
@@ -145,7 +150,7 @@ def build_playlist(
         screens.extend(
             ScreenItem(ScreenKind.FAVORITE_LIVE, Layout.CARDS, chunk,
                        title=_chunk_title(chunk), detail="favourite live")
-            for chunk in _chunk(fav_live, GAMES_PER_CARD_SCREEN)
+            for chunk in _chunk(fav_live, per_screen)
         )
     else:
         screens.extend(
@@ -158,7 +163,8 @@ def build_playlist(
     if rotation.show_nonfavorite_live and not rotation.favorites_only:
         live_others = _sort_live(g for g in other_games if g.is_live)
         screens.extend(
-            _grouped(live_others, ScreenKind.LIVE, rotation.layout_mode, "live")
+            _grouped(live_others, ScreenKind.LIVE, rotation.layout_mode, "live",
+                     per_screen=per_screen)
         )
 
     # 3. upcoming favourite games
@@ -166,8 +172,8 @@ def build_playlist(
         upcoming_favs = _sort_upcoming(g for g in fav_games if soon(g))
         screens.extend(
             _grouped(upcoming_favs, ScreenKind.FAVORITE_UPCOMING, rotation.layout_mode,
-                     "favourite upcoming", group_layout=Layout.UPCOMING,
-                     single_layout=Layout.UPCOMING)
+                     "favourite upcoming", per_screen=per_screen,
+                     group_layout=Layout.UPCOMING, single_layout=Layout.UPCOMING)
         )
 
     # 4. recent favourite finals
@@ -175,8 +181,8 @@ def build_playlist(
         final_favs = _sort_finals(g for g in fav_games if recent_final(g))
         screens.extend(
             _grouped(final_favs, ScreenKind.FAVORITE_FINAL, rotation.layout_mode,
-                     "favourite final", group_layout=Layout.FINAL,
-                     single_layout=Layout.FINAL)
+                     "favourite final", per_screen=per_screen,
+                     group_layout=Layout.FINAL, single_layout=Layout.FINAL)
         )
 
     # 5. everything else in enabled leagues
@@ -184,12 +190,14 @@ def build_playlist(
         screens.extend(
             _grouped(_sort_upcoming(g for g in other_games if soon(g)),
                      ScreenKind.UPCOMING, rotation.layout_mode, "upcoming",
+                     per_screen=per_screen,
                      group_layout=Layout.UPCOMING, single_layout=Layout.UPCOMING)
         )
     if rotation.show_recent_finals:
         screens.extend(
             _grouped(_sort_finals(g for g in other_games if recent_final(g)),
                      ScreenKind.FINAL, rotation.layout_mode, "final",
+                     per_screen=per_screen,
                      group_layout=Layout.FINAL, single_layout=Layout.FINAL)
         )
 
@@ -208,6 +216,7 @@ def _grouped(
     kind: ScreenKind,
     layout_mode: str,
     detail: str,
+    per_screen: int = GAMES_PER_CARD_SCREEN,
     group_layout: Layout = Layout.CARDS,
     single_layout: Layout = Layout.FEATURED,
 ) -> List[ScreenItem]:
@@ -224,15 +233,15 @@ def _grouped(
         return [
             ScreenItem(kind, group_layout, chunk,
                        title=_chunk_title(chunk), detail=detail)
-            for chunk in _chunk(games, GAMES_PER_CARD_SCREEN)
+            for chunk in _chunk(games, per_screen)
         ]
-    # auto: a lone game earns the full width, otherwise pack three per screen.
+    # auto: a lone game earns the full width, otherwise one game per panel.
     if len(games) == 1:
         return [ScreenItem(kind, single_layout, list(games),
                            title=_featured_title(games[0]), detail=detail)]
     return [
         ScreenItem(kind, group_layout, chunk, title=_chunk_title(chunk), detail=detail)
-        for chunk in _chunk(games, GAMES_PER_CARD_SCREEN)
+        for chunk in _chunk(games, per_screen)
     ]
 
 

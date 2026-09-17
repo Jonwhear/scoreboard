@@ -25,6 +25,8 @@ def main() -> int:
     parser.add_argument("output", nargs="?", default="preview-samples")
     parser.add_argument("--scale", type=int, default=4)
     parser.add_argument("--no-logos", action="store_true")
+    parser.add_argument("--chain", type=int, default=3,
+                        help="panels in the chain (canvas is 64*chain wide)")
     parser.add_argument("--cache-dir", default=paths.VAR_DIR,
                         help="where converted fonts and cached logos live")
     args = parser.parse_args()
@@ -36,7 +38,8 @@ def main() -> int:
     logos = None if args.no_logos else LogoCache(os.path.join(args.cache_dir, "logos"))
     if logos:
         logos.start()
-    context = layouts.RenderContext(fonts=fonts, logos=logos, show_logos=not args.no_logos)
+    context = layouts.RenderContext(fonts=fonts, logos=logos, show_logos=not args.no_logos,
+                                    width=64 * args.chain, height=32)
 
     frames = {
         "a-featured-live": lambda: layouts.render_featured(samples.sample_live_game(), context),
@@ -55,7 +58,8 @@ def main() -> int:
 
     for name, build in frames.items():
         image = build()
-        assert image.size == (192, 32), f"{name} rendered {image.size}, expected (192, 32)"
+        expected = (64 * args.chain, 32)
+        assert image.size == expected, f"{name} rendered {image.size}, expected {expected}"
         path = os.path.join(args.output, f"{name}.png")
         scale_nearest(image, args.scale).save(path)
         print(f"{path}  ({image.size[0]}x{image.size[1]} logical)")

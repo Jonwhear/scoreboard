@@ -106,29 +106,32 @@ def test_display_resizes_a_mismatched_frame():
 
 
 def test_preview_display_keeps_the_last_frame():
-    display = PreviewDisplay(DisplayConfig())
+    config = DisplayConfig()
+    display = PreviewDisplay(config)
     display.start()
     assert display.image is None
-    frame = Image.new("RGB", (192, 32), (10, 20, 30))
+    frame = Image.new("RGB", (config.width, config.height), (10, 20, 30))
     display.show(frame)
-    assert display.image.size == (192, 32)
+    assert display.image.size == (config.width, config.height)
     assert display.image.getpixel((0, 0)) == (10, 20, 30)
     display.clear()
     assert display.image.getpixel((0, 0)) == (0, 0, 0)
 
 
 def test_preview_display_writes_a_file(tmp_path):
+    config = DisplayConfig()
     target = tmp_path / "frame.png"
-    display = PreviewDisplay(DisplayConfig(), output_path=str(target))
-    display.show(Image.new("RGB", (192, 32), (255, 0, 0)))
+    display = PreviewDisplay(config, output_path=str(target))
+    display.show(Image.new("RGB", (config.width, config.height), (255, 0, 0)))
     assert target.exists()
-    assert Image.open(target).size == (192, 32)
+    assert Image.open(target).size == (config.width, config.height)
     assert not (tmp_path / "frame.png.tmp").exists(), "writes must be atomic"
 
 
-def test_preview_display_geometry_follows_config():
-    display = PreviewDisplay(DisplayConfig(chain_length=2))
-    assert (display.width, display.height) == (128, 32)
+@pytest.mark.parametrize("chain,width", [(1, 64), (2, 128), (3, 192)])
+def test_preview_display_geometry_follows_config(chain, width):
+    display = PreviewDisplay(DisplayConfig(chain_length=chain))
+    assert (display.width, display.height) == (width, 32)
 
 
 def test_matrix_backend_reports_a_useful_error_without_hardware():
@@ -142,11 +145,13 @@ def test_matrix_backend_reports_a_useful_error_without_hardware():
     assert "rgbmatrix" in str(excinfo.value)
 
 
-def test_matrix_display_declares_the_right_canvas():
+@pytest.mark.parametrize("chain,width", [(1, 64), (2, 128), (3, 192)])
+def test_matrix_display_declares_the_right_canvas(chain, width):
+    """cols is one panel; the chain is what makes the canvas wide."""
     from scoreboard.display.matrix import MatrixDisplay
 
-    display = MatrixDisplay(DisplayConfig(rows=32, cols=64, chain_length=3))
-    assert (display.width, display.height) == (192, 32)
+    display = MatrixDisplay(DisplayConfig(rows=32, cols=64, chain_length=chain))
+    assert (display.width, display.height) == (width, 32)
 
 
 def test_scale_nearest_is_bounded():
@@ -160,7 +165,7 @@ def test_scale_nearest_is_bounded():
 class RecordingDisplay(Display):
     backend_name = "recording"
 
-    def __init__(self, width=192, height=32):
+    def __init__(self, width=128, height=32):
         super().__init__(width, height)
         self.frames = []
         self.brightness = None
@@ -192,7 +197,7 @@ def test_runner_renders_frames_and_publishes_a_preview(tmp_path, nfl_games):
     runner, display, state, _ = make_runner(tmp_path)
     state.update_snapshot(LeagueSnapshot("nfl", games=nfl_games))
     runner._tick(0.0)
-    assert display.frames and display.frames[-1].size == (192, 32)
+    assert display.frames and display.frames[-1].size == (display.width, display.height)
     assert state.frame_png is not None and state.frame_png.startswith(b"\x89PNG")
     assert state.screen.layout in ("featured", "cards", "upcoming", "final", "idle")
 
@@ -336,4 +341,4 @@ def test_layouts_handle_accented_team_names(render_context):
     game.home.abbreviation = "MTL"
     game.away.display_name = "Atlético Madrid"
     image = layouts.render_featured(game, render_context)
-    assert image.size == (192, 32)
+    assert image.size == (render_context.width, render_context.height)

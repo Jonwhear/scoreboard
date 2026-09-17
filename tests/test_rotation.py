@@ -140,11 +140,17 @@ def test_layout_mode_featured_gives_one_game_per_screen(slate, now):
     assert all(screen.layout is Layout.FEATURED for screen in playlist)
 
 
-def test_layout_mode_cards_groups_three_per_screen(now):
+@pytest.mark.parametrize("chain", [1, 2, 3])
+def test_cards_pack_one_game_per_panel(now, chain):
+    """A two-panel chain must show two per screen, not drop the third."""
     games = sample_upcoming_games(now) + sample_final_games(now)
-    playlist = build_playlist(games, make_config(layout_mode="cards"), now)
-    assert all(len(screen.games) <= 3 for screen in playlist)
-    assert any(len(screen.games) == 3 for screen in playlist)
+    config = make_config(layout_mode="cards")
+    config.display.chain_length = chain
+    playlist = build_playlist(games, config, now)
+    assert all(len(screen.games) <= chain for screen in playlist)
+    assert any(len(screen.games) == chain for screen in playlist)
+    shown = sum(len(screen.games) for screen in playlist)
+    assert shown == len(games), "no game may be silently dropped"
 
 
 def test_playlist_is_deterministic(slate, now):

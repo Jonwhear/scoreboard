@@ -87,7 +87,7 @@ class DisplayConfig:
 
     rows: int = 32
     cols: int = 64
-    chain_length: int = 3
+    chain_length: int = 2
     parallel: int = 1
     gpio_mapping: str = "adafruit-hat"
     slowdown_gpio: int = 4
@@ -122,7 +122,7 @@ class DisplayConfig:
         return cls(
             rows=_clamp_int(data.get("rows"), 8, 64, 32),
             cols=_clamp_int(data.get("cols"), 8, 256, 64),
-            chain_length=_clamp_int(data.get("chain_length"), 1, 8, 3),
+            chain_length=_clamp_int(data.get("chain_length"), 1, 8, 2),
             parallel=_clamp_int(data.get("parallel"), 1, 3, 1),
             gpio_mapping=mapping,
             slowdown_gpio=_clamp_int(data.get("slowdown_gpio"), 0, 5, 4),

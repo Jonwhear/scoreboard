@@ -1,8 +1,8 @@
 """The rpi-rgb-led-matrix backend.
 
-Three 64x32 panels chained horizontally are configured as
-``cols=64, chain_length=3`` -- *not* as one 192-wide panel.  The library
-addresses each panel individually and builds the 192x32 canvas itself.
+Chained 64x32 panels are configured as ``cols=64, chain_length=N`` -- *not*
+as one wide panel.  The library
+addresses each panel individually and builds the wide canvas itself.
 
 This module is imported only when hardware output is requested, so the rest
 of the application runs unchanged on a machine with no GPIO.

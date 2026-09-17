@@ -15,7 +15,7 @@ It is **not** in version control — `config.example.json` is the template.
 | Section | Key | Meaning |
 | --- | --- | --- |
 | `display` | `rows`, `cols` | Geometry of **one** panel (64×32 here). |
-| | `chain_length` | Panels wired in series. 3 → a 192×32 canvas. |
+| | `chain_length` | Panels wired in series. 2 → a 128×32 canvas, 3 → 192×32. Layouts and rotation both follow it. |
 | | `parallel` | Parallel chains. 1 for the Adafruit bonnet. |
 | | `gpio_mapping` | `adafruit-hat` for the bonnet (`adafruit-hat-pwm` if you soldered the E/4 jumper). |
 | | `slowdown_gpio` | Higher = slower GPIO writes. 4 is right for a Pi 4. |

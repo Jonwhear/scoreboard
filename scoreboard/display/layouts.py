@@ -1,6 +1,10 @@
-"""Layouts for a 192x32 canvas (three chained 64x32 panels).
+"""Layouts for a 32-pixel-tall canvas of chained 64x32 panels.
 
-Everything here works on a logical canvas and returns a Pillow ``RGB``
+The canvas is 64 pixels per panel: 128x32 for the default two-panel chain,
+192x32 for three. Layouts read their size from the context rather than
+assuming a panel count, so the same code drives any chain length.
+
+Everything here works on that logical canvas and returns a Pillow ``RGB``
 image.  It knows nothing about rgbmatrix, ESPN, or HTTP -- which is what
 lets the browser preview and the panels render identically.
 
@@ -55,7 +59,7 @@ class RenderContext:
     show_logos: bool = True
     stale: bool = False
     now: Optional[datetime] = None
-    width: int = 192
+    width: int = 128
     height: int = 32
 
     @property
@@ -250,7 +254,20 @@ def draw_team_mark(
 # -- layout A: featured game ----------------------------------------------
 
 def render_featured(game: Game, context: RenderContext) -> Image.Image:
-    """One game across all three panels: logo, score, status, clock."""
+    """One game across the whole canvas.
+
+    Three panels give room for three zones side by side (away | status |
+    home). Two panels do not -- squeezing a third zone in leaves each one
+    too narrow to read -- so there the status moves to a strip across the
+    top and the two teams get half the width each.
+    """
+    if context.width >= 3 * PANEL_WIDTH:
+        return _render_featured_wide(game, context)
+    return _render_featured_compact(game, context)
+
+
+def _render_featured_wide(game: Game, context: RenderContext) -> Image.Image:
+    """Away | status | home, one panel each. Needs 192px or more."""
     canvas = new_canvas(context.width, context.height)
     draw = ImageDraw.Draw(canvas)
     fonts = context.fonts
@@ -312,6 +329,107 @@ def render_featured(game: Game, context: RenderContext) -> Image.Image:
 
     _draw_stale_marker(draw, context)
     return canvas
+
+
+def _featured_status_text(game: Game, context: RenderContext) -> Tuple[str, Tuple[int, int, int]]:
+    """One line summarising the game, for the compact layout's status strip."""
+    if game.is_live:
+        parts = [period_text(game)]
+        clock = _clock_text(game)
+        if clock:
+            parts.append(clock)
+        extra = game.situation.get("down_distance") or _mlb_count(game, brief=True)
+        if extra and not clock:
+            parts.append(extra)
+        return " ".join(parts), LIVE
+    if game.is_final:
+        winner = game.home if game.home.winner else (game.away if game.away.winner else None)
+        text = final_text(game)
+        if winner is not None:
+            text = f"{text}  {winner.label} WIN"
+        return text, FINAL
+    start = format_start(game, context.now)
+    if game.broadcast:
+        start = f"{start}  {game.broadcast}"
+    return start, UPCOMING
+
+
+def _render_featured_compact(game: Game, context: RenderContext) -> Image.Image:
+    """Status strip across the top, then one team per half of the canvas."""
+    canvas = new_canvas(context.width, context.height)
+    draw = ImageDraw.Draw(canvas)
+    fonts = context.fonts
+
+    status, color = _featured_status_text(game, context)
+    status_font = fit_font(fonts, ("small", "tiny"), status, context.width - 4)
+    status_font.draw_centered(draw, context.width // 2, 0,
+                              status_font.fit(status, context.width - 4), color)
+    strip_bottom = status_font.height + 1
+    _hline(draw, 2, context.width - 3, strip_bottom, FAINT)
+
+    half = context.width // 2
+    body_top = strip_bottom + 2
+    _vline(draw, half, body_top + 1, context.height - 2, FAINT)
+
+    _draw_compact_side(canvas, draw, context, game.away, (0, half - 2), body_top,
+                       align_left=True)
+    _draw_compact_side(canvas, draw, context, game.home, (half + 2, context.width - 1),
+                       body_top, align_left=False)
+
+    _draw_stale_marker(draw, context)
+    return canvas
+
+
+def _draw_compact_side(
+    canvas: Image.Image,
+    draw: ImageDraw.ImageDraw,
+    context: RenderContext,
+    team: GameTeam,
+    span: Tuple[int, int],
+    body_top: int,
+    align_left: bool,
+) -> None:
+    """Abbreviation over a logo and the score, inside half the canvas."""
+    x0, x1 = span
+    fonts = context.fonts
+    width = x1 - x0 + 1
+    label_font = fonts.get("small")
+
+    rank = f"{team.rank} " if team.rank and team.rank <= 25 else ""
+    header = label_font.fit(f"{rank}{team.label}", width)
+    label_font.draw_centered(draw, (x0 + x1) // 2, body_top, header, BRIGHT)
+    _hline(draw, x0 + 2, x1 - 2, body_top + label_font.height + 1, readable(team.color))
+
+    value_top = body_top + label_font.height + 3
+    value_height = max(1, context.height - value_top)
+    logo_size = min(value_height, width // 2, 20)
+
+    if team.score is None:
+        value_text = team.record or ""
+        value_font = fit_font(fonts, ("small", "tiny"), value_text, width - logo_size - 6)
+        value_color = DIM
+    else:
+        value_text = team.score_text
+        value_font = fit_font(fonts, ("score", "large", "medium", "small"),
+                              value_text, width - logo_size - 6)
+        value_color = BRIGHT
+    value_y = value_top + max(0, (value_height - value_font.height) // 2)
+
+    # Inset the score away from the centre divider; the two halves' scores
+    # sit next to each other and read as one number if they are too close.
+    gutter = 4
+    if align_left:
+        box = (x0 + 1, value_top, x0 + logo_size, value_top + logo_size - 1)
+        draw_team_mark(canvas, draw, context, team, box, with_initials=False)
+        value_font.draw_right(draw, x1 - gutter, value_y, value_text, value_color)
+    else:
+        box = (x1 - logo_size, value_top, x1 - 1, value_top + logo_size - 1)
+        draw_team_mark(canvas, draw, context, team, box, with_initials=False)
+        value_font.draw(draw, (x0 + gutter, value_y), value_text, value_color)
+
+    if team.has_possession:
+        marker_x = x0 if align_left else x1 - 1
+        draw.rectangle([(marker_x, body_top), (marker_x + 1, body_top + 1)], fill=POSSESSION)
 
 
 def _mlb_count(game: Game, brief: bool = False) -> str:
@@ -499,6 +617,10 @@ def render_upcoming(games: Sequence[Game], context: RenderContext) -> Image.Imag
 def _render_upcoming_single(
     canvas: Image.Image, draw: ImageDraw.ImageDraw, context: RenderContext, game: Game
 ) -> Image.Image:
+    if context.width < 3 * PANEL_WIDTH:
+        # Too narrow for the three-zone treatment; the compact featured
+        # layout already says everything this screen needs to.
+        return _render_featured_compact(game, context)
     fonts = context.fonts
     tiny, small = fonts.get("tiny"), fonts.get("small")
     center_x = context.width // 2
@@ -528,6 +650,8 @@ def render_finals(games: Sequence[Game], context: RenderContext) -> Image.Image:
 
     if len(games) == 1:
         game = games[0]
+        if context.width < 3 * PANEL_WIDTH:
+            return _render_featured_compact(game, context)
         _draw_featured_side(canvas, draw, context, game.away, (0, PANEL_WIDTH - 1), align_left=True)
         _draw_featured_side(canvas, draw, context, game.home,
                             (context.width - PANEL_WIDTH, context.width - 1), align_left=False)
@@ -583,17 +707,22 @@ def render_idle(
     canvas = new_canvas(context.width, context.height)
     draw = ImageDraw.Draw(canvas)
     fonts = context.fonts
-    tiny, small = fonts.get("tiny"), fonts.get("small")
+    tiny = fonts.get("tiny")
     now = context.clock_now
 
-    split = 86
+    # 0.45 of the canvas keeps the familiar 86px split on a 192px canvas and
+    # scales sensibly on a shorter one.
+    split = max(40, int(context.width * 0.45))
     clock_text = now.strftime("%-I:%M")
     clock_font = fit_font(fonts, ("score", "large", "medium"), clock_text, split - 8)
     clock_font.draw_centered(draw, split // 2, 4, clock_text, BRIGHT)
     suffix = now.strftime("%p")
-    tiny.draw(draw, (split - 14, 6), suffix, DIM)
+    suffix_x = split // 2 + clock_font.text_width(clock_text) // 2 + 2
+    if suffix_x + tiny.text_width(suffix) <= split - 2:
+        tiny.draw(draw, (suffix_x, 6), suffix, DIM)
     date_text = now.strftime("%a %b %-d").upper()
-    small.draw_centered(draw, split // 2, 22, small.fit(date_text, split - 4), DIM)
+    date_font = fit_font(fonts, ("small", "tiny"), date_text, split - 4)
+    date_font.draw_centered(draw, split // 2, 22, date_font.fit(date_text, split - 4), DIM)
 
     _vline(draw, split + 2, 3, context.height - 4, FAINT)
     right_left, right_right = split + 8, context.width - 3
@@ -606,17 +735,40 @@ def render_idle(
         matchup_font.draw(draw, (right_left, 10),
                           matchup_font.fit(matchup, right_right - right_left), BRIGHT)
         start = local_time(next_game.start_time)
-        when = f"{start.strftime('%a %b %-d').upper()} {format_clock_only(next_game)}"
-        when_font = fit_font(fonts, ("small", "tiny"), when, right_right - right_left)
-        when_font.draw(draw, (right_left, 22), when_font.fit(when, right_right - right_left), DIM)
+        clock = format_clock_only(next_game)
+        available = right_right - right_left
+        # Prefer a shorter string at a readable size over a long one shrunk
+        # to fit: the left half already shows today's date, and every game in
+        # the upcoming window is within a day or two, so the weekday and time
+        # carry the information that matters.
+        candidates = [
+            f"{start.strftime('%a %b %-d').upper()} {clock}",
+            f"{start.strftime('%a').upper()} {clock}",
+            clock,
+        ]
+        when_font = fonts.get("small")
+        when = next((text for text in candidates
+                     if when_font.text_width(text) <= available), candidates[-1])
+        if when_font.text_width(when) > available:
+            when_font = tiny
+        when_font.draw(draw, (right_left, 22), when_font.fit(when, available), DIM)
     else:
         title = headline or "SCOREBOARD"
-        title_font = fit_font(fonts, ("medium", "small"), title, right_right - right_left)
+        title_font = fit_font(fonts, ("medium", "small", "tiny"), title,
+                              right_right - right_left)
         title_font.draw(draw, (right_left, 6), title_font.fit(title, right_right - right_left),
                         BRIGHT)
-        status = "NO GAMES TODAY" if online else "OFFLINE - CACHED"
-        small.draw(draw, (right_left, 20), small.fit(status, right_right - right_left),
-                   DIM if online else STALE)
+        available = right_right - right_left
+        small = fonts.get("small")
+        if online:
+            status = ("NO GAMES TODAY" if small.text_width("NO GAMES TODAY") <= available
+                      else "NO GAMES")
+        else:
+            status = ("OFFLINE - CACHED" if small.text_width("OFFLINE - CACHED") <= available
+                      else "OFFLINE")
+        status_font = fit_font(fonts, ("small", "tiny"), status, available)
+        status_font.draw(draw, (right_left, 20), status_font.fit(status, available),
+                         DIM if online else STALE)
 
     _draw_stale_marker(draw, context)
     return canvas

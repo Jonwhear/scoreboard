@@ -15,10 +15,18 @@ from scoreboard.config import (Config, ConfigStore, SleepConfig, deep_merge,
 def test_defaults_describe_the_real_hardware():
     config = default_config()
     assert (config.display.rows, config.display.cols) == (32, 64)
-    assert config.display.chain_length == 3
+    assert config.display.chain_length == 2
     assert config.display.gpio_mapping == "adafruit-hat"
     assert config.display.slowdown_gpio == 4
-    assert (config.display.width, config.display.height) == (192, 32)
+    assert (config.display.width, config.display.height) == (128, 32)
+
+
+@pytest.mark.parametrize("chain,expected", [(1, 64), (2, 128), (3, 192), (4, 256)])
+def test_canvas_width_follows_chain_length(chain, expected):
+    """Panels are chained, so the canvas grows with the chain."""
+    config = Config.from_dict({"display": {"chain_length": chain}})
+    assert config.display.width == expected
+    assert config.display.height == 32
 
 
 def test_out_of_range_values_are_clamped_not_rejected():
@@ -140,7 +148,7 @@ def test_corrupt_config_is_quarantined_and_backup_is_used(tmp_path):
 def test_config_with_no_files_uses_defaults(tmp_path):
     store = ConfigStore(str(tmp_path / "missing.json"))
     config = store.load()
-    assert config.display.chain_length == 3
+    assert config.display.chain_length == 2
     assert store.source == "defaults"
 
 
