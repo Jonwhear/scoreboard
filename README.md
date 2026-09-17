@@ -686,8 +686,37 @@ sudo .venv/bin/python scripts/tune-matrix.py --pwm-bits 8 --slowdown 4 --save
 sudo systemctl restart sports-scoreboard
 ```
 
-If nothing above gets you to a steady image, the answer is power — go to the
-hardware table below, and measure the voltage.
+**When the rate is flat and it still flickers, stop tuning.** A reading like
+`100.0Hz (lowest: 100.0Hz)` means the timing is perfect and the remaining
+fault is electrical. Keep the settings that got you there and go to the
+hardware section — but first, narrow it down without a meter by walking the
+chain back up:
+
+```bash
+sudo .venv/bin/python scripts/tune-matrix.py --chain 1 --pattern white
+sudo .venv/bin/python scripts/tune-matrix.py --chain 2 --pattern white
+sudo .venv/bin/python scripts/tune-matrix.py --chain 3 --pattern white
+```
+
+Full white is the maximum-current image, so each panel you add is another
+~2-4 A. The point at which a rock-steady display starts to misbehave is your
+supply's ceiling. Two corroborating checks:
+
+```bash
+# Same chain, a quarter of the current: if this is stable and white is not,
+# the panels are drawing more than the supply can deliver.
+sudo .venv/bin/python scripts/tune-matrix.py --chain 3 --brightness 20 --pattern white
+
+# The low-current image at full brightness, for comparison.
+sudo .venv/bin/python scripts/tune-matrix.py --chain 3 --pattern pattern
+```
+
+A word on photographing the panels: **don't trust the picture.** These
+displays are multiplexed, lighting a couple of rows at a time, so a camera
+often captures only the rows lit during its exposure and shows a few bright
+bands on a dark panel. That is a photographic artifact, not a fault. Judge
+brightness and steadiness with your eyes, and use the camera only to check
+for flicker (a rolling dark band across the image in video).
 
 ### Software symptoms — configuration is wrong
 
