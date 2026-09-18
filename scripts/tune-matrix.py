@@ -87,6 +87,9 @@ def main() -> int:
                        action="store_false")
     parser.add_argument("--quiet", action="store_true",
                         help="do not print the refresh rate")
+    parser.add_argument("--force-safe-blit", action="store_true",
+                        help="skip the bindings' fast image path and use the "
+                             "per-pixel one, to test it in isolation")
     parser.add_argument("--save", action="store_true",
                         help="write these settings into config.json and exit")
     parser.add_argument("--config", default=None)
@@ -112,10 +115,6 @@ def main() -> int:
     if args.hardware_pulsing is not None:
         overrides["disable_hardware_pulsing"] = not args.hardware_pulsing
 
-    for attribute, value in overrides.items():
-        setattr(display_config, attribute, value)
-    display_config.show_refresh_rate = not args.quiet
-
     if args.save:
         if not overrides:
             print("Nothing to save: pass some settings alongside --save.")
@@ -127,6 +126,14 @@ def main() -> int:
         print("Restart the scoreboard for these to take effect:")
         print("  sudo systemctl restart sports-scoreboard")
         return 0
+
+    # Apply the overrides only for this run, after the save branch, so
+    # --save writes exactly what was asked for and nothing else.
+    for attribute, value in overrides.items():
+        setattr(display_config, attribute, value)
+    display_config.show_refresh_rate = not args.quiet
+    if args.force_safe_blit:
+        display_config.force_safe_blit = True
 
     from scoreboard.display.matrix import MatrixDisplay, MatrixUnavailableError
 
@@ -153,6 +160,7 @@ def main() -> int:
     print(f"  brightness   : {display_config.brightness}")
     print(f"  hw pulsing   : {'on' if not display_config.disable_hardware_pulsing else 'off'}")
     print(f"  limit refresh: {display_config.limit_refresh_rate_hz or 'unlimited'}")
+    print(f"  blit path    : {'per-pixel (forced)' if args.force_safe_blit else 'auto'}")
     print()
     if not args.quiet:
         print("  The library prints the achieved refresh rate below. Aim for 100 Hz+;")

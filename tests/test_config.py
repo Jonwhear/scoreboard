@@ -176,3 +176,15 @@ def test_saved_file_is_readable_after_privilege_drop(tmp_path):
     store.load()
     store.save()
     assert os.stat(path).st_mode & 0o044, "config must be world/group readable"
+
+
+def test_diagnostic_display_settings_default_off():
+    """show_refresh_rate and force_safe_blit are for debugging only.
+
+    tune-matrix.py turns them on for its own run; a --save must not
+    persist them as a side effect of that.
+    """
+    config = default_config()
+    assert config.display.show_refresh_rate is False
+    assert config.display.force_safe_blit is False
+    assert Config.from_dict(config.to_dict()).display.show_refresh_rate is False

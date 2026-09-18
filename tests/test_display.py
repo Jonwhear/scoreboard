@@ -479,3 +479,35 @@ def test_non_rgb_frames_are_converted():
     display = _matrix_display_with(canvas)
     display.show(Image.new("RGBA", (display.width, display.height), (9, 8, 7, 255)))
     assert canvas.pixels[(0, 0)] == (9, 8, 7)
+
+
+def test_force_safe_blit_skips_the_fast_path_entirely():
+    """Lets the per-pixel path be exercised on hardware that would not
+    otherwise trigger the fallback, to tell a drawing fault from a
+    power one."""
+    from scoreboard.display.matrix import MatrixDisplay
+
+    canvas = _FakeCanvas(fast_works=True)
+    display = MatrixDisplay(DisplayConfig(chain_length=2, force_safe_blit=True))
+    display._matrix = _FakeMatrix(canvas)
+    display._canvas = canvas
+
+    display.show(_frame(display, 12))
+    assert canvas.fast_calls == 0, "the fast path must not be attempted"
+    assert canvas.safe_calls == 1
+
+
+def test_force_safe_blit_is_off_by_default():
+    from scoreboard.display.matrix import MatrixDisplay
+
+    assert MatrixDisplay(DisplayConfig())._fast_blit is True
+
+
+def test_blit_cost_is_reported_once(caplog):
+    canvas = _FakeCanvas(fast_works=True)
+    display = _matrix_display_with(canvas)
+    with caplog.at_level("INFO"):
+        for value in range(4):
+            display.show(_frame(display, value * 10))
+    reports = [r for r in caplog.records if "First frame pushed" in r.message]
+    assert len(reports) == 1

@@ -11,6 +11,7 @@ of the application runs unchanged on a machine with no GPIO.
 from __future__ import annotations
 
 import logging
+import time
 from typing import Any, Optional
 
 from PIL import Image
@@ -38,8 +39,9 @@ class MatrixDisplay(Display):
         self._brightness = config.brightness
         #: The bindings' fast blit reads Pillow's internal buffer pointer.
         #: We start with it and drop to the supported path if it breaks.
-        self._fast_blit = True
+        self._fast_blit = not config.force_safe_blit
         self._last_frame: Optional[bytes] = None
+        self._blit_reported = False
 
     # -- lifecycle -------------------------------------------------------
 
@@ -53,6 +55,8 @@ class MatrixDisplay(Display):
             self.config.parallel, self.config.gpio_mapping, self.config.slowdown_gpio,
             self.config.brightness, self.width, self.height,
         )
+        if self.config.force_safe_blit:
+            log.info("force_safe_blit is set; using the per-pixel image path")
         try:
             self._matrix = matrix_class(options=options)
         except Exception as exc:
@@ -128,8 +132,27 @@ class MatrixDisplay(Display):
             return
         self._last_frame = frame
 
+        started = time.monotonic()
         self._blit(image)
         self._canvas = self._matrix.SwapOnVSync(self._canvas)
+        self._report_blit_cost(time.monotonic() - started)
+
+    def _report_blit_cost(self, seconds: float) -> None:
+        """Log how long the first real frame took, once.
+
+        Worth knowing: the per-pixel fallback is orders of magnitude slower
+        than the pointer path, and if it were slow enough to matter this is
+        where it would show up.
+        """
+        if self._blit_reported:
+            return
+        self._blit_reported = True
+        log.info(
+            "First frame pushed in %.1f ms via the %s path (%dx%d)",
+            seconds * 1000.0,
+            "fast" if self._fast_blit else "per-pixel",
+            self.width, self.height,
+        )
 
     def _blit(self, image: Image.Image) -> None:
         """Copy a frame into the back buffer, the fastest way that works.

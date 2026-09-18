@@ -99,6 +99,9 @@ class DisplayConfig:
     #: Ask the library to print the achieved refresh rate. Invaluable when
     #: chasing flicker: below roughly 100 Hz the panels visibly shimmer.
     show_refresh_rate: bool = False
+    #: Skip the bindings' fast image path entirely. Useful for testing, and
+    #: as a permanent setting where that path is known to be broken.
+    force_safe_blit: bool = False
     show_logos: bool = True
     #: Unix user the process drops to once the matrix has been initialized.
     #: Empty means "stay as the current user" (used in preview mode).
@@ -132,6 +135,7 @@ class DisplayConfig:
             limit_refresh_rate_hz=_clamp_int(data.get("limit_refresh_rate_hz"), 0, 400, 0),
             disable_hardware_pulsing=_as_bool(data.get("disable_hardware_pulsing"), True),
             show_refresh_rate=_as_bool(data.get("show_refresh_rate"), False),
+            force_safe_blit=_as_bool(data.get("force_safe_blit"), False),
             show_logos=_as_bool(data.get("show_logos"), True),
             run_as_user=str(data.get("run_as_user", "") or ""),
         )
