@@ -188,3 +188,33 @@ def test_diagnostic_display_settings_default_off():
     assert config.display.show_refresh_rate is False
     assert config.display.force_safe_blit is False
     assert Config.from_dict(config.to_dict()).display.show_refresh_rate is False
+
+
+def test_reset_timing_targets_are_the_shipped_defaults():
+    """--reset-timing must restore exactly the free-running configuration.
+
+    Capping the refresh rate was a tuning step that made a working display
+    flicker: pinning 170Hz down to 100Hz throws away refresh headroom and
+    lands on the edge of visible flicker. Unlimited is the default for a
+    reason, and the escape hatch has to get back to it.
+    """
+    display = default_config().display
+    assert display.limit_refresh_rate_hz == 0, "unlimited, not pinned"
+    assert display.disable_hardware_pulsing is True
+    assert display.pwm_bits == 11
+    assert display.pwm_lsb_nanoseconds == 130
+    assert display.slowdown_gpio == 4
+
+
+def test_reset_timing_leaves_geometry_alone(tmp_path):
+    """Panel geometry describes the hardware, not the tuning."""
+    store = ConfigStore(str(tmp_path / "config.json"))
+    store.load()
+    store.update({"display": {"chain_length": 2, "gpio_mapping": "adafruit-hat-pwm",
+                              "limit_refresh_rate_hz": 100, "pwm_bits": 8}})
+    store.update({"display": {"limit_refresh_rate_hz": 0, "pwm_bits": 11}})
+    display = store.config.display
+    assert display.chain_length == 2, "geometry survives a timing reset"
+    assert display.gpio_mapping == "adafruit-hat-pwm"
+    assert display.limit_refresh_rate_hz == 0
+    assert display.pwm_bits == 11

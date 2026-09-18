@@ -43,7 +43,7 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from PIL import Image, ImageDraw  # noqa: E402
 
 from scoreboard import paths  # noqa: E402
-from scoreboard.config import ConfigStore  # noqa: E402
+from scoreboard.config import ConfigStore, DisplayConfig  # noqa: E402
 from scoreboard.display.fonts import FontRegistry  # noqa: E402
 from scoreboard.display.layouts import RenderContext, render_test_pattern  # noqa: E402
 
@@ -90,6 +90,10 @@ def main() -> int:
     parser.add_argument("--force-safe-blit", action="store_true",
                         help="skip the bindings' fast image path and use the "
                              "per-pixel one, to test it in isolation")
+    parser.add_argument("--reset-timing", action="store_true",
+                        help="put every timing knob back to its default -- the "
+                             "state before any tuning -- keeping panel geometry. "
+                             "Use this when tuning has made things worse.")
     parser.add_argument("--save", action="store_true",
                         help="write these settings into config.json and exit")
     parser.add_argument("--config", default=None)
@@ -102,6 +106,16 @@ def main() -> int:
     display_config = config.display
 
     overrides = {}
+    if args.reset_timing:
+        # Everything a tuning session can change, back to the shipped
+        # defaults. Panel geometry, gpio mapping and run_as_user are left
+        # alone: those describe the hardware, not the tuning.
+        defaults = DisplayConfig()
+        for attribute in ("pwm_bits", "pwm_lsb_nanoseconds", "slowdown_gpio",
+                          "limit_refresh_rate_hz", "disable_hardware_pulsing",
+                          "show_refresh_rate", "force_safe_blit"):
+            overrides[attribute] = getattr(defaults, attribute)
+
     for attribute, value in (
         ("pwm_bits", args.pwm_bits),
         ("pwm_lsb_nanoseconds", args.pwm_lsb_ns),
