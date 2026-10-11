@@ -8,8 +8,8 @@ from datetime import datetime
 
 import pytest
 
-from scoreboard.config import (Config, ConfigStore, SleepConfig, deep_merge,
-                               default_config)
+from scoreboard.config import (CONFIG_VERSION, Config, ConfigStore, SleepConfig,
+                               deep_merge, default_config)
 
 
 def test_defaults_describe_the_real_hardware():
@@ -218,3 +218,98 @@ def test_reset_timing_leaves_geometry_alone(tmp_path):
     assert display.gpio_mapping == "adafruit-hat-pwm"
     assert display.limit_refresh_rate_hz == 0
     assert display.pwm_bits == 11
+
+
+# -- upgrade safety --------------------------------------------------------
+#
+# The promise: upgrading the scoreboard never loses what you configured.
+# These tests exist because favourites are tedious to re-enter on a phone.
+
+def test_a_pre_versioning_config_keeps_everything(tmp_path):
+    """A config.json written before schema versions existed must survive."""
+    legacy = {
+        "display": {"rows": 32, "cols": 64, "chain_length": 2, "brightness": 72},
+        "sports": {
+            "enabled_leagues": ["nfl", "nhl"],
+            "favorite_teams": [
+                {"league": "nfl", "team_id": "16", "abbreviation": "MIN",
+                 "display_name": "Minnesota Vikings"},
+                {"league": "nhl", "team_id": "30", "abbreviation": "MIN",
+                 "display_name": "Minnesota Wild"},
+            ],
+        },
+        "rotation": {"screen_seconds": 12, "favorites_only": True},
+        "sleep": {"enabled": True, "start": "23:30", "end": "06:30"},
+    }
+    path = tmp_path / "config.json"
+    path.write_text(json.dumps(legacy))
+
+    config = ConfigStore(str(path)).load()
+
+    assert [fav.key for fav in config.sports.favorite_teams] == ["nfl:16", "nhl:30"]
+    assert config.sports.favorite_teams[1].display_name == "Minnesota Wild"
+    assert config.sports.enabled_leagues == ["nfl", "nhl"]
+    assert config.display.brightness == 72
+    assert config.display.chain_length == 2
+    assert config.rotation.screen_seconds == 12
+    assert config.rotation.favorites_only is True
+    assert (config.sleep.start, config.sleep.end) == ("23:30", "06:30")
+    assert config.version == CONFIG_VERSION
+
+
+def test_new_settings_appear_with_defaults_without_touching_old_ones(tmp_path):
+    path = tmp_path / "config.json"
+    path.write_text(json.dumps({
+        "sports": {"favorite_teams": [{"league": "epl", "team_id": "359"}]},
+    }))
+    config = ConfigStore(str(path)).load()
+    assert [fav.key for fav in config.sports.favorite_teams] == ["epl:359"]
+    # Everything added later is simply present at its default.
+    assert config.rotation.layout_mode == "auto"
+    assert config.display.show_refresh_rate is False
+
+
+def test_a_config_from_a_newer_version_still_loads(tmp_path, caplog):
+    """Downgrading must not wipe the file: ignore what we do not know."""
+    path = tmp_path / "config.json"
+    path.write_text(json.dumps({
+        "version": CONFIG_VERSION + 5,
+        "display": {"brightness": 33},
+        "sports": {"favorite_teams": [{"league": "nfl", "team_id": "9"}]},
+        "something_from_the_future": {"nested": [1, 2, 3]},
+    }))
+    with caplog.at_level("WARNING"):
+        config = ConfigStore(str(path)).load()
+    assert config.display.brightness == 33
+    assert [fav.key for fav in config.sports.favorite_teams] == ["nfl:9"]
+    assert any("newer version" in record.message for record in caplog.records)
+
+
+def test_unknown_keys_are_ignored_not_fatal(tmp_path):
+    path = tmp_path / "config.json"
+    path.write_text(json.dumps({
+        "display": {"brightness": 44, "a_key_we_removed": True},
+        "sports": {"favorite_teams": [{"league": "mlb", "team_id": "16",
+                                       "nickname": "gone"}]},
+        "an_entire_section_we_removed": {"x": 1},
+    }))
+    config = ConfigStore(str(path)).load()
+    assert config.display.brightness == 44
+    assert [fav.key for fav in config.sports.favorite_teams] == ["mlb:16"]
+
+
+def test_favourites_round_trip_through_a_save(tmp_path):
+    """Load an old file, save it back, and still have the favourites."""
+    path = tmp_path / "config.json"
+    path.write_text(json.dumps({"sports": {"favorite_teams": [
+        {"league": "nfl", "team_id": "16", "abbreviation": "MIN",
+         "display_name": "Minnesota Vikings"}]}}))
+    store = ConfigStore(str(path))
+    store.load()
+    store.update({"display": {"brightness": 60}})
+
+    reloaded = ConfigStore(str(path)).load()
+    assert [fav.key for fav in reloaded.sports.favorite_teams] == ["nfl:16"]
+    assert reloaded.sports.favorite_teams[0].display_name == "Minnesota Vikings"
+    assert reloaded.display.brightness == 60
+    assert json.loads(path.read_text())["version"] == CONFIG_VERSION

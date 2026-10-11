@@ -216,6 +216,13 @@ class RotationConfig:
     #: Hard cap on playlist length so a busy Saturday cannot make the
     #: rotation take 20 minutes to come back around.
     max_screens: int = 12
+    #: Pin the display to one game, as "<league>:<game_id>". While set,
+    #: nothing else is shown. Cleared from the web UI, or automatically
+    #: once the game has been finished for lock_release_minutes.
+    locked_game: str = ""
+    #: Minutes after a locked game goes final before the lock releases
+    #: itself. 0 keeps it locked until you clear it.
+    lock_release_minutes: int = 30
 
     @classmethod
     def from_dict(cls, data: Dict[str, Any]) -> "RotationConfig":
@@ -234,6 +241,8 @@ class RotationConfig:
             final_window_hours=_clamp_int(data.get("final_window_hours"), 1, 72, 12),
             upcoming_window_hours=_clamp_int(data.get("upcoming_window_hours"), 1, 336, 36),
             max_screens=_clamp_int(data.get("max_screens"), 1, 60, 12),
+            locked_game=str(data.get("locked_game", "") or "").strip(),
+            lock_release_minutes=_clamp_int(data.get("lock_release_minutes"), 0, 1440, 30),
         )
 
 
@@ -312,10 +321,17 @@ class WebConfig:
         )
 
 
+#: Bumped only when a key is renamed or its meaning changes, so an old
+#: file can be migrated. Adding a new key never needs a bump: every section
+#: fills unknown fields from its defaults.
+CONFIG_VERSION = 2
+
+
 @dataclass
 class Config:
     """Root configuration object."""
 
+    version: int = CONFIG_VERSION
     display: DisplayConfig = field(default_factory=DisplayConfig)
     sports: SportsConfig = field(default_factory=SportsConfig)
     rotation: RotationConfig = field(default_factory=RotationConfig)
@@ -325,8 +341,9 @@ class Config:
 
     @classmethod
     def from_dict(cls, data: Dict[str, Any]) -> "Config":
-        data = data if isinstance(data, dict) else {}
+        data = migrate(data if isinstance(data, dict) else {})
         return cls(
+            version=CONFIG_VERSION,
             display=DisplayConfig.from_dict(data.get("display")),
             sports=SportsConfig.from_dict(data.get("sports")),
             rotation=RotationConfig.from_dict(data.get("rotation")),
@@ -337,6 +354,7 @@ class Config:
 
     def to_dict(self) -> Dict[str, Any]:
         return {
+            "version": self.version,
             "display": asdict(self.display),
             "sports": {
                 "enabled_leagues": list(self.sports.enabled_leagues),
@@ -350,6 +368,37 @@ class Config:
 
     def copy(self) -> "Config":
         return Config.from_dict(self.to_dict())
+
+
+def migrate(data: Dict[str, Any]) -> Dict[str, Any]:
+    """Bring an older configuration file up to the current schema.
+
+    The guarantee this exists to keep: **upgrading never loses your
+    settings.** Favourites in particular are stored by league id and team
+    id, so they survive anything short of a team changing its id upstream.
+
+    Adding new keys needs no migration -- each section fills what it does
+    not find from its defaults, and unknown keys are ignored rather than
+    rejected, so a config written by a newer version still loads on an
+    older one.
+    """
+    if not data:
+        return {}
+    version = data.get("version")
+    if not isinstance(version, int):
+        # Pre-versioning (v1). Nothing was renamed between v1 and v2, so
+        # this is just a stamp; the loader fills in everything new.
+        version = 1
+    if version > CONFIG_VERSION:
+        log.warning(
+            "Configuration was written by a newer version (schema %d, this build "
+            "understands %d). Loading what is recognisable and leaving the rest "
+            "alone.", version, CONFIG_VERSION,
+        )
+        return data
+    if version < CONFIG_VERSION:
+        log.info("Migrating configuration from schema %d to %d", version, CONFIG_VERSION)
+    return data
 
 
 def default_config() -> Config:

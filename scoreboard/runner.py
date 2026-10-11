@@ -15,7 +15,7 @@ import logging
 import threading
 import time
 from datetime import datetime, timezone
-from typing import Optional, Tuple
+from typing import List, Optional, Tuple
 
 from PIL import Image
 
@@ -35,6 +35,8 @@ log = logging.getLogger(__name__)
 FRAME_INTERVAL = 0.2            # 5 fps is ample for scoreboard content
 PREVIEW_INTERVAL = 0.5          # how often the browser preview is re-encoded
 PLAYLIST_INTERVAL = 2.0         # how often the playlist is rebuilt
+IDLE_ITEMS = 6                  # games the idle screen cycles through
+IDLE_ITEM_SECONDS = 5.0         # how long each one stays up
 
 #: Test screens the web UI can request.
 TEST_SCREENS = ("clock", "sample_game", "sample_cards", "sample_upcoming", "test_pattern")
@@ -136,7 +138,7 @@ class DisplayRunner(threading.Thread):
 
     # -- rendering --------------------------------------------------------
 
-    def _context(self, config) -> RenderContext:
+    def _context(self, config, phase: float = 0.0) -> RenderContext:
         return RenderContext(
             fonts=self.fonts,
             logos=self.logos,
@@ -144,6 +146,7 @@ class DisplayRunner(threading.Thread):
             stale=self.state.any_stale,
             width=config.display.width,
             height=config.display.height,
+            phase=phase,
         )
 
     def _render_rotation(
@@ -162,10 +165,11 @@ class DisplayRunner(threading.Thread):
             self._rotator.advance(monotonic_now)
 
         screen = self._rotator.tick(monotonic_now)
+        context = self._context(config, phase=self._rotator.phase(monotonic_now))
         image = render_screen(
             screen,
             context,
-            next_game=self._next_favorite_game(config),
+            next_game=self._idle_item(config, monotonic_now),
             online=self.state.online,
         )
         info = ScreenInfo(
@@ -261,15 +265,43 @@ class DisplayRunner(threading.Thread):
                 return None
             return name
 
-    def _next_favorite_game(self, config) -> Optional[Game]:
-        favorites = config.sports.favorite_keys
-        if not favorites:
+    def _idle_item(self, config, monotonic_now: float) -> Optional[Game]:
+        """The game the idle screen should show right now, cycling slowly."""
+        items = self._idle_items(config)
+        if not items:
             return None
+        index = int(monotonic_now // IDLE_ITEM_SECONDS) % len(items)
+        return items[index]
+
+    def _idle_items(self, config) -> List[Game]:
+        """Games worth showing beside the clock, best first.
+
+        The idle screen used to look only at favourite teams, so with no
+        favourites set its right-hand half permanently read "NO GAMES
+        TODAY" -- half the display wasted. Fall back through favourites,
+        then any upcoming game in an enabled league, then the most recent
+        finals, so that half always carries something real.
+        """
         now = datetime.now(timezone.utc)
-        upcoming = [
-            game for game in self.state.games()
-            if game.is_upcoming and game.start_time >= now and game.involves_any(favorites)
-        ]
-        if not upcoming:
-            return None
-        return min(upcoming, key=lambda game: (game.start_time, game.key))
+        favorites = config.sports.favorite_keys
+        enabled = set(config.sports.enabled_leagues)
+        games = [game for game in self.state.games() if game.league in enabled]
+
+        upcoming = sorted(
+            (game for game in games if game.is_upcoming and game.start_time >= now),
+            key=lambda game: (game.start_time, game.key),
+        )
+        finals = sorted(
+            (game for game in games if game.is_final),
+            key=lambda game: (game.start_time, game.key), reverse=True,
+        )
+
+        favourite_first = [game for game in upcoming if game.involves_any(favorites)]
+        others = [game for game in upcoming if not game.involves_any(favorites)]
+        ordered = favourite_first + others + finals
+        return ordered[:IDLE_ITEMS]
+
+    def _next_favorite_game(self, config) -> Optional[Game]:
+        """Kept for the idle layout's single-item signature."""
+        items = self._idle_items(config)
+        return items[0] if items else None

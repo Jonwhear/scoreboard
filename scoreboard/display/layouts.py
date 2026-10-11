@@ -61,6 +61,10 @@ class RenderContext:
     now: Optional[datetime] = None
     width: int = 128
     height: int = 32
+    #: Seconds this screen has been on display. Layouts that scroll read
+    #: this instead of keeping their own clock, which keeps them pure
+    #: functions of (data, phase) and therefore testable frame by frame.
+    phase: float = 0.0
 
     @property
     def clock_now(self) -> datetime:
@@ -97,11 +101,19 @@ def readable(color: Optional[str], fallback=WHITE) -> Tuple[int, int, int]:
     return rgb  # type: ignore[return-value]
 
 
-def fit_font(fonts: FontRegistry, roles: Sequence[str], text: str, max_width: int) -> Font:
-    """Largest font from ``roles`` (largest first) whose text fits."""
+def fit_font(fonts: FontRegistry, roles: Sequence[str], text: str, max_width: int,
+             max_height: Optional[int] = None) -> Font:
+    """Largest font from ``roles`` (largest first) that fits the box.
+
+    ``max_height`` matters as much as the width on a 32-pixel canvas: a
+    score is only two characters, so a width-only check happily picks an
+    18-pixel face for a 12-pixel row and the digits get their feet cut off.
+    """
     chosen = fonts.get(roles[-1])
     for role in roles:
         font = fonts.get(role)
+        if max_height is not None and font.height > max_height:
+            continue
         if font.text_width(text) <= max_width:
             return font
         chosen = font
@@ -181,8 +193,11 @@ def period_text(game: Game) -> str:
 
 
 def final_text(game: Game) -> str:
+    """``FINAL``, or how it ended when that is worth a few extra pixels."""
     detail = (game.status_short or game.status_detail or "FINAL").upper()
-    if "OT" in detail or "SHOOTOUT" in detail:
+    if "SO" in detail.replace("SOCCER", "") or "SHOOTOUT" in detail:
+        return "FINAL/SO"
+    if "OT" in detail or "OVERTIME" in detail:
         return "FINAL/OT"
     return "FINAL"
 
@@ -348,10 +363,7 @@ def _featured_status_text(game: Game, context: RenderContext) -> Tuple[str, Tupl
         if winner is not None:
             text = f"{text}  {winner.label} WIN"
         return text, FINAL
-    start = format_start(game, context.now)
-    if game.broadcast:
-        start = f"{start}  {game.broadcast}"
-    return start, UPCOMING
+    return format_start(game, context.now), UPCOMING
 
 
 def _render_featured_compact(game: Game, context: RenderContext) -> Image.Image:
@@ -361,9 +373,16 @@ def _render_featured_compact(game: Game, context: RenderContext) -> Image.Image:
     fonts = context.fonts
 
     status, color = _featured_status_text(game, context)
-    status_font = fit_font(fonts, ("small", "tiny"), status, context.width - 4)
+    available = context.width - 4
+    # Add the broadcast only if the whole line still fits: a truncated
+    # "ESPN+/HU" is worse than no broadcast at all.
+    if game.is_upcoming and game.broadcast:
+        combined = f"{status}  {game.broadcast}"
+        if fonts.get("small").text_width(combined) <= available:
+            status = combined
+    status_font = fit_font(fonts, ("small", "tiny"), status, available)
     status_font.draw_centered(draw, context.width // 2, 0,
-                              status_font.fit(status, context.width - 4), color)
+                              status_font.fit(status, available), color)
     strip_bottom = status_font.height + 1
     _hline(draw, 2, context.width - 3, strip_bottom, FAINT)
 
@@ -404,15 +423,18 @@ def _draw_compact_side(
     value_height = max(1, context.height - value_top)
     logo_size = min(value_height, width // 2, 20)
 
+    value_width = width - logo_size - 6
     if team.score is None:
         value_text = team.record or ""
-        value_font = fit_font(fonts, ("small", "tiny"), value_text, width - logo_size - 6)
+        value_font = fit_font(fonts, ("small", "tiny"), value_text, value_width,
+                              max_height=value_height)
         value_color = DIM
     else:
         value_text = team.score_text
         value_font = fit_font(fonts, ("score", "large", "medium", "small"),
-                              value_text, width - logo_size - 6)
+                              value_text, value_width, max_height=value_height)
         value_color = BRIGHT
+    value_text = value_font.fit(value_text, value_width)
     value_y = value_top + max(0, (value_height - value_font.height) // 2)
 
     # Inset the score away from the centre divider; the two halves' scores
@@ -471,12 +493,14 @@ def _draw_featured_side(
         # Pre-game: a big "-" says nothing, the record says something. It sits
         # at the foot of the column so the centre panel owns the middle band.
         value_text = team.record or ""
-        value_font = fit_font(fonts, ("medium", "small", "tiny"), value_text, available)
+        value_font = fit_font(fonts, ("medium", "small", "tiny"), value_text, available,
+                              max_height=body_bottom - body_top)
         value_color = DIM
         value_y = body_bottom - value_font.height
     else:
         value_text = team.score_text
-        value_font = fit_font(fonts, ("score", "large", "medium"), value_text, available)
+        value_font = fit_font(fonts, ("score", "large", "medium"), value_text, available,
+                              max_height=body_bottom - body_top + 1)
         value_color = BRIGHT
         value_y = body_top + max(0, (body_bottom - body_top + 1 - value_font.height) // 2)
 
@@ -714,7 +738,9 @@ def render_idle(
     # scales sensibly on a shorter one.
     split = max(40, int(context.width * 0.45))
     clock_text = now.strftime("%-I:%M")
-    clock_font = fit_font(fonts, ("score", "large", "medium"), clock_text, split - 8)
+    # The date sits at y=22, so the clock has 18 rows from y=4.
+    clock_font = fit_font(fonts, ("score", "large", "medium"), clock_text, split - 8,
+                          max_height=17)
     clock_font.draw_centered(draw, split // 2, 4, clock_text, BRIGHT)
     suffix = now.strftime("%p")
     suffix_x = split // 2 + clock_font.text_width(clock_text) // 2 + 2
@@ -728,30 +754,7 @@ def render_idle(
     right_left, right_right = split + 8, context.width - 3
 
     if next_game is not None:
-        tiny.draw(draw, (right_left, 1), "NEXT UP", UPCOMING)
-        matchup = f"{next_game.away.label} @ {next_game.home.label}"
-        matchup_font = fit_font(fonts, ("medium", "small", "tiny"), matchup,
-                                right_right - right_left)
-        matchup_font.draw(draw, (right_left, 10),
-                          matchup_font.fit(matchup, right_right - right_left), BRIGHT)
-        start = local_time(next_game.start_time)
-        clock = format_clock_only(next_game)
-        available = right_right - right_left
-        # Prefer a shorter string at a readable size over a long one shrunk
-        # to fit: the left half already shows today's date, and every game in
-        # the upcoming window is within a day or two, so the weekday and time
-        # carry the information that matters.
-        candidates = [
-            f"{start.strftime('%a %b %-d').upper()} {clock}",
-            f"{start.strftime('%a').upper()} {clock}",
-            clock,
-        ]
-        when_font = fonts.get("small")
-        when = next((text for text in candidates
-                     if when_font.text_width(text) <= available), candidates[-1])
-        if when_font.text_width(when) > available:
-            when_font = tiny
-        when_font.draw(draw, (right_left, 22), when_font.fit(when, available), DIM)
+        _draw_idle_game(canvas, draw, context, next_game, right_left, right_right)
     else:
         title = headline or "SCOREBOARD"
         title_font = fit_font(fonts, ("medium", "small", "tiny"), title,
@@ -772,6 +775,66 @@ def render_idle(
 
     _draw_stale_marker(draw, context)
     return canvas
+
+
+def _draw_idle_game(
+    canvas: Image.Image,
+    draw: ImageDraw.ImageDraw,
+    context: RenderContext,
+    game: Game,
+    left: int,
+    right: int,
+) -> None:
+    """The half of the idle screen beside the clock.
+
+    Shows whatever is most useful about this game: a score if it has one,
+    the kick-off time if it has not.
+    """
+    fonts = context.fonts
+    tiny = fonts.get("tiny")
+    available = right - left
+
+    if game.is_live:
+        header, header_color = "LIVE", LIVE
+    elif game.is_final:
+        header, header_color = final_text(game), FINAL
+    else:
+        header, header_color = "NEXT UP", UPCOMING
+    tiny.draw(draw, (left, 1), tiny.fit(header, available), header_color)
+
+    # The league is useful context once the idle screen stops being
+    # favourites-only, and there is room for it on the header line.
+    league_tag = game.league.upper()
+    if tiny.text_width(league_tag) + tiny.text_width(header) + 4 <= available:
+        tiny.draw_right(draw, right, 1, league_tag, DIM)
+
+    matchup = f"{game.away.label} @ {game.home.label}"
+    matchup_font = fit_font(fonts, ("medium", "small", "tiny"), matchup, available)
+    matchup_font.draw(draw, (left, 10), matchup_font.fit(matchup, available), BRIGHT)
+
+    small = fonts.get("small")
+    if game.state is GameState.PRE:
+        start = local_time(game.start_time)
+        clock = format_clock_only(game)
+        candidates = [
+            f"{start.strftime('%a %b %-d').upper()} {clock}",
+            f"{start.strftime('%a').upper()} {clock}",
+            clock,
+        ]
+        detail = next((text for text in candidates
+                       if small.text_width(text) <= available), candidates[-1])
+        detail_font = small if small.text_width(detail) <= available else tiny
+        detail_font.draw(draw, (left, 22), detail_font.fit(detail, available), DIM)
+        return
+
+    score = f"{game.away.score_text}-{game.home.score_text}"
+    extra = period_text(game) if game.is_live else ""
+    score_font = fit_font(fonts, ("medium", "small", "tiny"), score, available)
+    score_font.draw(draw, (left, 22), score, BRIGHT)
+    if extra:
+        used = score_font.text_width(score) + 3
+        if used + tiny.text_width(extra) <= available:
+            tiny.draw_right(draw, right, 23, extra, LIVE)
 
 
 def render_message(context: RenderContext, title: str, detail: str = "") -> Image.Image:

@@ -321,3 +321,55 @@ def test_stats_are_reportable(tmp_path):
     cache = LogoCache(str(tmp_path), client=FakeLogoClient(png_bytes()))
     stats = cache.stats()
     assert set(stats) == {"cached_raw", "cached_processed", "memory", "failed", "queued"}
+
+
+# -- dark logos ------------------------------------------------------------
+
+def solid_logo(color, size=(120, 120)):
+    """A crest-shaped blob on a transparent field."""
+    image = Image.new("RGBA", size, (0, 0, 0, 0))
+    inset = size[0] // 4
+    for x in range(inset, size[0] - inset):
+        for y in range(inset, size[1] - inset):
+            image.putpixel((x, y), color)
+    return image
+
+
+def mean_luminance(image):
+    alpha = image.getchannel("A")
+    opaque = alpha.point(lambda value: 255 if value > 0 else 0)
+    count = opaque.histogram()[255]
+    if not count:
+        return 0.0
+    masked = Image.composite(image.convert("L"), Image.new("L", image.size, 0), opaque)
+    return sum(level * n for level, n in enumerate(masked.histogram())) / count
+
+
+def test_a_near_black_logo_is_lifted_so_it_reads_on_an_unlit_panel():
+    """Half the NHL has a black or near-black crest."""
+    processed = LogoCache._process(solid_logo((10, 12, 30, 255)), 16, 16)
+    assert mean_luminance(processed) > 60, "a dark crest must not vanish"
+
+
+def test_lifting_preserves_hue():
+    processed = LogoCache._process(solid_logo((8, 10, 40, 255)), 16, 16)
+    red, green, blue = processed.getpixel((8, 8))[:3]
+    assert blue > green > red, "navy must stay navy, just brighter"
+
+
+def test_an_already_bright_logo_is_left_alone():
+    original = solid_logo((220, 40, 50, 255))
+    processed = LogoCache._process(original, 16, 16)
+    assert processed.getpixel((8, 8))[:3] == (220, 40, 50)
+
+
+def test_a_fully_transparent_logo_does_not_divide_by_zero():
+    blank = Image.new("RGBA", (64, 64), (0, 0, 0, 0))
+    processed = LogoCache._process(blank, 16, 16)
+    assert processed.size == (16, 16)
+
+
+def test_transparency_survives_the_lift():
+    processed = LogoCache._process(solid_logo((5, 5, 5, 255)), 16, 16)
+    assert processed.getpixel((0, 0))[3] == 0, "corners stay transparent"
+    assert processed.getpixel((8, 8))[3] == 255

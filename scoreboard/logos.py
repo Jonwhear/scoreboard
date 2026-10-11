@@ -35,6 +35,11 @@ RETRY_AFTER_SECONDS = 30 * 60
 MAX_FAILURES = 4
 GIVE_UP_SECONDS = 24 * 3600
 MEMORY_CACHE_SIZE = 96
+#: Mean luminance (0-255) below which a logo is lifted so it reads on black.
+DARK_LOGO_MEAN = 95
+MAX_LOGO_GAIN = 3.2
+#: Added after the gain so a pure-black crest becomes visible at all.
+LOGO_LIFT = 38
 
 
 @dataclass
@@ -159,6 +164,7 @@ class LogoCache:
         # a panel, so make each pixel either lit or off.
         alpha = source.getchannel("A").point(lambda value: 255 if value >= 110 else 0)
         source.putalpha(alpha)
+        source = LogoCache._lift_dark_logo(source)
         canvas = Image.new("RGBA", (width, height), (0, 0, 0, 0))
         canvas.paste(
             source,
@@ -166,6 +172,39 @@ class LogoCache:
             source,
         )
         return canvas
+
+    @staticmethod
+    def _lift_dark_logo(source: Image.Image) -> Image.Image:
+        """Brighten a logo that would otherwise disappear on an unlit panel.
+
+        Plenty of crests are mostly black or very dark navy -- a good half
+        of the NHL, and a fair few soccer clubs. On paper they sit on white;
+        on a matrix they sit on black and vanish, so the panel shows an
+        empty box where the logo should be. Measure the luminance of the
+        opaque pixels and, if it is low, scale the whole thing up until it
+        reads. Hue is preserved, so a navy crest stays navy, just lighter.
+        """
+        alpha = source.getchannel("A")
+        opaque = alpha.point(lambda value: 255 if value > 0 else 0)
+        pixel_count = opaque.histogram()[255]
+        if not pixel_count:
+            return source
+
+        # Mean luminance over opaque pixels only; fully transparent corners
+        # would otherwise drag every logo's average towards black.
+        masked = Image.composite(source.convert("L"),
+                                 Image.new("L", source.size, 0), opaque)
+        total = sum(level * count for level, count in enumerate(masked.histogram()))
+        mean = total / float(pixel_count)
+        if mean >= DARK_LOGO_MEAN:
+            return source
+
+        gain = min(MAX_LOGO_GAIN, DARK_LOGO_MEAN / max(mean, 1.0))
+        red, green, blue, _ = source.split()
+        lifted = [channel.point(lambda value: min(255, int(value * gain + LOGO_LIFT)))
+                  for channel in (red, green, blue)]
+        log.debug("Lifted a dark logo: mean luminance %.0f, gain %.2f", mean, gain)
+        return Image.merge("RGBA", (*lifted, alpha))
 
     # -- paths and IO ----------------------------------------------------
 

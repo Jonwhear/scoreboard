@@ -33,6 +33,7 @@ GAMES_PER_CARD_SCREEN = 3
 
 
 class ScreenKind(str, Enum):
+    LOCKED = "locked"
     FAVORITE_LIVE = "favorite_live"
     LIVE = "live"
     FAVORITE_UPCOMING = "favorite_upcoming"
@@ -54,6 +55,7 @@ class Layout(str, Enum):
 
 #: Lower sorts first.
 _KIND_PRIORITY = {
+    ScreenKind.LOCKED: -1,
     ScreenKind.FAVORITE_LIVE: 0,
     ScreenKind.LIVE: 1,
     ScreenKind.FAVORITE_UPCOMING: 2,
@@ -84,6 +86,32 @@ class ScreenItem:
         return f"{self.kind.value}|{self.layout.value}|" + ",".join(
             game.key for game in self.games
         )
+
+
+def find_locked_game(
+    games: Sequence[Game], rotation, now: Optional[datetime] = None
+) -> Optional[Game]:
+    """The game the display is pinned to, if the lock is still in force.
+
+    Returns ``None`` when nothing is locked, when the locked game is no
+    longer in the feed, or when it finished long enough ago that the lock
+    has released itself -- so a lock set during a game does not leave the
+    board stuck on last night's final.
+    """
+    key = (getattr(rotation, "locked_game", "") or "").strip()
+    if not key:
+        return None
+    game = next((candidate for candidate in games if candidate.key == key), None)
+    if game is None:
+        return None
+    release_minutes = getattr(rotation, "lock_release_minutes", 0)
+    if game.is_final and release_minutes:
+        now = now or datetime.now(timezone.utc)
+        finished_for = now - game.last_updated
+        if finished_for > timedelta(minutes=release_minutes):
+            log.info("Lock on %s released: final for over %d minutes", key, release_minutes)
+            return None
+    return game
 
 
 def _chunk(items: Sequence[Game], size: int) -> List[List[Game]]:
@@ -121,6 +149,14 @@ def build_playlist(
     rotation = config.rotation
     favorites = favorite_keys if favorite_keys is not None else config.sports.favorite_keys
     enabled = set(config.sports.enabled_leagues)
+
+    # A locked game wins outright -- that is the whole point of locking it.
+    # It is deliberately not filtered by enabled_leagues: you asked for this
+    # game, not for its league.
+    locked = find_locked_game(games, rotation, now)
+    if locked is not None:
+        return [ScreenItem(ScreenKind.LOCKED, Layout.FEATURED, [locked],
+                           title=_featured_title(locked), detail="locked")]
 
     # One card per physical panel, so a two-panel chain shows two games per
     # screen rather than silently dropping the third.
@@ -298,6 +334,16 @@ class Rotator:
         elif monotonic_now - self._shown_at >= max(1, self.screen_seconds):
             self.advance(monotonic_now)
         return self.current()  # type: ignore[return-value]
+
+    def phase(self, monotonic_now: float) -> float:
+        """Seconds the current screen has been on display.
+
+        Scrolling layouts render from this rather than keeping their own
+        clock, so a frame is a pure function of (data, phase).
+        """
+        if self._shown_at is None:
+            return 0.0
+        return max(0.0, monotonic_now - self._shown_at)
 
     def advance(self, monotonic_now: Optional[float] = None) -> Optional[ScreenItem]:
         """Move to the next screen immediately."""
