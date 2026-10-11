@@ -4,6 +4,11 @@
 It is **not** in version control — `config.example.json` is the template.
 
 * The app creates `config.json` from built-in defaults on first start.
+* It carries a schema `version`. An older file is **migrated** on load (missing
+  keys take their defaults) and rewritten; a file from a newer version than the
+  code is read as best it can be rather than discarded. Upgrading — or rolling
+  back — never costs you your favourites, which are stored as league id + team
+  id pairs rather than by name.
 * Every save is atomic (temp file + `os.replace`) and the previous version is
   kept as `config.json.bak`.
 * If `config.json` is unreadable at startup it is moved aside as
@@ -23,7 +28,9 @@ It is **not** in version control — `config.example.json` is the template.
 | | `pwm_bits`, `pwm_lsb_nanoseconds` | Colour depth / refresh trade-off. Lower `pwm_bits` if the panels flicker. |
 | | `limit_refresh_rate_hz` | 0 = unlimited. Set ~100 for a steadier current draw. |
 | | `disable_hardware_pulsing` | Keep `true` unless you have blacklisted the onboard sound module. |
-| | `show_logos` | Draw team logos, or fall back to abbreviations. |
+| | `show_logos` | Draw team logos, or fall back to abbreviations. Very dark logos are brightened automatically so they read on an unlit panel. |
+| | `show_refresh_rate` | Overlay the achieved refresh rate. Diagnostics only. |
+| | `force_safe_blit` | Skip the library's fast `SetImage` path. Only needed on a 32-bit build that raises `OverflowError`; the app detects that case and falls back by itself. |
 | | `run_as_user` | Account to drop to after the matrix is initialized. Empty = auto-detect. |
 | `sports` | `enabled_leagues` | Canonical ids: `nfl`, `ncaaf`, `mlb`, `nhl`, `nba`, `ncaam`, `mls`, `epl`, `efl_championship`. |
 | | `favorite_teams` | `{league, team_id, abbreviation, display_name}`. Set these from the web UI. |
@@ -33,6 +40,11 @@ It is **not** in version control — `config.example.json` is the template.
 | | `layout_mode` | `auto`, `featured` (one game full width) or `cards` (three games). |
 | | `final_window_hours` / `upcoming_window_hours` | How far back/forward games stay eligible. |
 | | `max_screens` | Cap on rotation length, so a busy Saturday still cycles promptly. |
+| | `locked_game` | A game key (`nfl:401671789`). While set, that one game is the only screen — regardless of `enabled_leagues` or `favorites_only`. Empty = normal rotation. Set it from **Follow one game** in the web UI. |
+| | `lock_release_minutes` | Drop the lock this many minutes after the locked game finishes. 0–1440, default 30. `0` = keep it until you clear it. |
+| | `show_standings` | Include league tables in the rotation. |
+| | `standings_leagues` | Which leagues' tables to show. Empty = the leagues in `enabled_leagues`. |
+| | `standings_seconds` | How long each table is held, 5–120 (default 20). The scroll speed follows from it. |
 | `sleep` | `enabled`, `start`, `end` | Blank the panels overnight. The window may cross midnight. |
 | `polling` | `favorite_live_seconds` | Poll interval when a favourite is playing. |
 | | `live_seconds` | Poll interval when any game is live or about to start. |

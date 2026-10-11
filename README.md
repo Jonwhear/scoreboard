@@ -43,8 +43,12 @@ status gets a column of its own:
 - [Installation](#installation)
 - [Running it](#running-it)
 - [The web UI](#the-web-ui)
+- [Following one game](#following-one-game)
+- [League tables](#league-tables)
 - [Configuration](#configuration)
+- [Upgrades keep your settings](#upgrades-keep-your-settings)
 - [systemd service](#systemd-service)
+- [Updating itself on every boot](#updating-itself-on-every-boot)
 - [Logs](#logs)
 - [Tests](#tests)
 - [Architecture](#architecture)
@@ -64,7 +68,12 @@ status gets a column of its own:
 * Normalises everything into one internal `Game` model — no provider-specific
   JSON leaks past `scoreboard/providers/espn.py`.
 * Prioritises favourite teams, then other live games, then upcoming, then
-  recent finals, then an idle clock; rotates when several are eligible.
+  recent finals, then league tables, then an idle clock; rotates when several
+  are eligible.
+* Can be **locked to one game** — a single screen, nothing else, until you
+  unlock it or the game has been over for a while.
+* Shows **league tables** that scroll vertically, with zone stripes for
+  Champions League, Europa, relegation or playoff places.
 * Downloads and caches team logos once, processes them for the panel size,
   and falls back to team abbreviations when a logo is missing.
 * Adapts its polling rate: ~15 s when a favourite is playing, ~25 s when any
@@ -73,7 +82,13 @@ status gets a column of its own:
   "stale" marker in the corner, and the clock keeps running.
 * Serves a configuration UI with a **pixel-accurate preview of the exact
   framebuffer** the LEDs are receiving.
+* Fills the idle clock screen's other half with real content — the next
+  favourite's game, then any upcoming game, then the latest finals — instead
+  of leaving half the canvas reading "NO GAMES TODAY".
 * Starts at boot under systemd and restarts itself after a crash.
+* Optionally **updates itself from git on every boot**, verifies that the new
+  commit actually starts, and rolls back on its own if it does not — so the
+  Pi never needs a keyboard or a screen.
 
 ---
 
@@ -209,7 +224,12 @@ sudo systemctl restart sports-scoreboard
 ```
 
 Your `config/config.json`, cached logos and team lists are gitignored, so a
-`git pull` never disturbs your settings.
+`git pull` never disturbs your settings — and the config file is versioned and
+migrated, so an upgrade keeps your favourites either way (see
+[Upgrades keep your settings](#upgrades-keep-your-settings)).
+
+To skip this entirely and have the Pi update itself on every boot, see
+[Updating itself on every boot](#updating-itself-on-every-boot).
 
 ### What the installer does
 
@@ -318,6 +338,7 @@ immediately afterwards (see [below](#root-gpio-and-privilege-dropping)).
 | `--preview-out FILE.png` | Also write every frame to a PNG |
 | `--log-level DEBUG` | More detail in the journal |
 | `--strict-hardware` | Exit on matrix failure instead of falling back to preview |
+| `--check-only` | Load the config, build every component, render one frame, exit. Used by the boot updater to prove a commit starts. |
 
 ### Render the layouts to PNGs
 
@@ -353,8 +374,15 @@ It shows:
 * **Leagues** — which leagues are polled
 * **Display** — brightness, seconds per screen, layout mode, logo toggle,
   favourites-only, which categories appear, sleep schedule
+* **Follow one game** — search today's games and pin the display to one of
+  them; the pinned game is highlighted and one tap unlocks it again
+* **League tables** — switch them on, pick which leagues, set how long each
+  table is held, and read the current table in the browser
 * **Buttons** — force next screen, refresh data now, and test screens
   (clock, sample game, sample cards, panel test pattern)
+
+Everything the display does is settable here. There is no setting that only
+exists in `config.json`, and nothing needs a restart.
 
 **Changes take effect immediately.** Nothing here requires restarting the
 service. Saves are atomic, so a power cut cannot easily corrupt the config.
@@ -385,6 +413,72 @@ design; it is a LAN appliance.
 
 ---
 
+## Following one game
+
+When one game is the only thing you care about, pin the display to it:
+**Follow one game** in the web UI → search → tap the game. The rotation stops
+and that single screen stays up, refreshing as the score changes.
+
+* It ignores the rest of your settings on purpose — a locked game is shown
+  even if its league is not in `enabled_leagues` and even with
+  `favorites_only` on. You asked for *that* game.
+* The lock releases itself `rotation.lock_release_minutes` after the game has
+  finished (default 30, `0` = never) so a Sunday-night lock does not leave you
+  looking at yesterday's final on Monday morning. Normal rotation resumes
+  without anyone touching the UI.
+* It survives restarts: the lock is a game key in `config.json`, not
+  in-memory state. If that game is no longer in the data at all, the lock is
+  ignored and the rotation runs as usual — it is never a dead screen.
+* Unlock from the same card, or `POST /api/lock` with an empty `game`.
+
+```bash
+# from the command line, if you prefer
+curl -s -X POST http://scoreboard.local:8080/api/lock \
+     -H 'Content-Type: application/json' -d '{"game":"nfl:401671789"}'
+curl -s -X POST http://scoreboard.local:8080/api/lock \
+     -H 'Content-Type: application/json' -d '{"game":""}'
+```
+
+---
+
+## League tables
+
+Layout F. One table per league, drawn across the whole canvas and scrolling
+vertically while the screen is held — a pause at the top, a steady scroll, a
+pause at the bottom.
+
+```
+┌───────────────────────────────────────┐
+│ PREMIER LEAGUE                    EPL │
+├───────────────────────────────────────┤
+│▌1  ARS  [crest]            8 7 1 0 22 │   ▌ blue  — Champions League
+│▌2  MCI  [crest]            8 6 1 1 19 │   ▌ amber — Europa / Conference
+│ 3  LIV  [crest]            8 5 2 1 17 │
+│▌18 WOL  [crest]            8 1 1 6  4 │   ▌ red   — relegation
+└───────────────────────────────────────┘
+```
+
+* Turn them on in the web UI (**League tables**), choose which leagues, and
+  set how many seconds each table is held (`rotation.standings_seconds`,
+  5–120, default 20). With no leagues picked it uses the ones you poll.
+* The **zone stripe** down the left edge comes from ESPN's own note on the
+  row, so it is the league's real qualification rule rather than a guess:
+  blue for Champions League places, amber for Europa/Conference, red for
+  relegation, green for a clinched playoff or division spot. ESPN's own
+  colour is used when it publishes one.
+* The ranked column follows the sport: points for soccer, win–loss record
+  for the North American leagues (`5-1`, not `5-0-1` — draws are only shown
+  for leagues that can draw), games behind as a last resort.
+* Tables are cached on disk in `var/` and refreshed in the background at most
+  every 30 minutes; a failed refresh is retried after 10 minutes and the
+  previous table keeps being shown. They cost nothing while they are off.
+* Tables sort *after* games in the rotation — they are reference material, not
+  news — so a live favourite is never pushed aside by a table.
+* `GET /api/standings` returns whatever is cached, which is also what the web
+  UI renders.
+
+---
+
 ## Configuration
 
 `config/config.json` — see [`config/README.md`](config/README.md) for the full
@@ -399,6 +493,26 @@ Safety properties:
   never deleted — the backup is tried next, then built-in defaults
 * out-of-range values are clamped, unknown leagues dropped, unknown keys
   ignored; a bad value never prevents startup
+
+---
+
+## Upgrades keep your settings
+
+`config/config.json`, the logo cache and the team catalogs are gitignored, so
+pulling a new version cannot overwrite them. On top of that the file carries a
+schema version:
+
+* A schema `version` is stamped into every save.
+* On load, an older file is **migrated** rather than replaced — missing keys
+  get their defaults, and the file is rewritten at the new version.
+* A file from a *newer* version than the code is read as best it can be, not
+  discarded, so rolling back a commit does not cost you your favourites.
+* Favourites are stored as `{league id, team id}` pairs, never by name, so
+  they survive renames, re-branding and layout changes upstream.
+
+The upgrade path is covered by tests: a pre-versioning config, a
+newer-than-code config, a config full of unknown keys and a full round-trip
+are all asserted to come back with the favourites intact.
 
 ---
 
@@ -437,6 +551,60 @@ entirely unprivileged with `--preview` — handy when the panels are unplugged.
 
 ---
 
+## Updating itself on every boot
+
+Opt in — this is a second system-level change, so it is not installed by
+`--service` alone:
+
+```bash
+sudo ./scripts/install.sh --auto-update
+```
+
+That installs the normal service **and** `sports-scoreboard-update.service`,
+a `oneshot` unit ordered `Before=sports-scoreboard.service`. On every boot,
+before the panels light up, `scripts/auto-update.sh`:
+
+1. records the commit that is running now,
+2. `git fetch`es and fast-forwards the current branch,
+3. reinstalls dependencies **only** if `requirements.txt` changed,
+4. runs `python -m scoreboard.app --check-only` with a 90 second timeout —
+   which loads the config, resolves the fonts, builds the provider, the
+   catalogs, the scheduler and renders one frame,
+5. and if that fails, **resets back to the previous commit**, records the bad
+   commit in `var/blocked-commit` so the next boot does not retry it, and
+   writes the failure (traceback included) to the journal and to
+   `var/last-update-check.log`.
+
+Then the scoreboard starts — on the new commit if it passed, on the old one
+if it did not. Either way the panels come up.
+
+```bash
+journalctl -u sports-scoreboard-update -b     # what this boot's update did
+cat var/last-update-check.log                 # the verification output
+cat var/blocked-commit                        # a commit that refused to start
+sudo systemctl disable sports-scoreboard-update   # turn it off again
+```
+
+What it deliberately will **not** do:
+
+| Situation | What happens |
+| --- | --- |
+| No network | Logged as a no-op; boots on the current commit |
+| Local edits on the Pi | Left completely alone; no update attempted |
+| Detached HEAD | Refuses to update |
+| Already up to date | Silent no-op |
+| New commit does not start | Rolled back, recorded, never retried |
+| `config.json` / `var/` | Never touched — they are gitignored |
+
+The unit runs as the service account, not root, and the main unit uses
+`Wants=` rather than `Requires=`, so even a hard failure of the updater can
+never stop the scoreboard from starting.
+
+**It only ever fast-forwards the branch the Pi is already on.** It will not
+switch branches, merge, or rebase.
+
+---
+
 ## Logs
 
 ```bash
@@ -463,7 +631,7 @@ poll, so the journal stays readable.
 ## Tests
 
 ```bash
-.venv/bin/python -m pytest              # ~180 tests, about 2 seconds
+.venv/bin/python -m pytest              # ~300 tests, about 3 seconds
 .venv/bin/python -m pytest -v
 ```
 
@@ -473,7 +641,11 @@ is in season. It covers ESPN normalisation (including malformed events),
 favourite matching, priority ordering and rotation, config validation and
 corruption recovery, layout rendering at several chain lengths, logo
 processing and fallback, stale/offline behaviour, the web API, font
-resolution (including the BDF conversion path), and the render loop.
+resolution (including the BDF conversion path), and the render loop. It also
+covers the things most likely to bite later: config **migration** from older
+versions, locking to a game and the lock releasing itself, standings parsing
+for both the grouped (conference) and single-table shapes, table scrolling
+arithmetic, and the dark-logo correction.
 
 ---
 
@@ -841,6 +1013,11 @@ into negative here.
 | Team picker stays empty; no logos ever appear | The service user cannot write `var/`. The log says so explicitly: `sudo chown -R $USER ~/sports-scoreboard`, then restart |
 | Log says `Still running as root` | The project is root-owned (usually a `sudo git clone`). `sudo chown -R $USER ~/sports-scoreboard` |
 | Blocky/soft text | No BDF fonts found — the status panel shows which font each role resolved to. Point `SCOREBOARD_BDF_FONTS` at `~/rpi-rgb-led-matrix/fonts` |
+| Rotation stuck on one game | It is locked. The status panel names the locked game; unlock it in **Follow one game** |
+| No league tables in the rotation | They are off by default; switch them on in the web UI. A table also needs to have been fetched — the first one appears within a minute or two of enabling |
+| A table scrolls past rows you wanted to read | Raise the seconds-per-table slider; the scroll speed is derived from how long the screen is held |
+| An NHL/soccer crest looks like a black blob | Fixed automatically — very dark logos are brightened until they read on an unlit panel, preserving hue. If one still looks wrong it is the source artwork; turn `show_logos` off for a text-only screen |
+| Boot update did nothing | `journalctl -u sports-scoreboard-update -b` says which no-op applied (offline, local edits, already current, or a blocked commit) |
 
 ---
 
@@ -891,6 +1068,7 @@ sports-scoreboard/
 │   ├── rotation.py              priority + rotation engine
 │   ├── logos.py                 download, process and cache logos
 │   ├── teams.py                 cached team catalogs for the picker
+│   ├── standings.py             cached league tables, refreshed in background
 │   ├── httpclient.py            timeouts, retries, last-known-good cache
 │   ├── privileges.py            drop root after the matrix is up
 │   ├── paths.py                 where files live
@@ -902,12 +1080,13 @@ sports-scoreboard/
 │   │   ├── base.py              Display interface
 │   │   ├── matrix.py            rgbmatrix backend
 │   │   ├── preview.py           image backend (browser preview, dev)
-│   │   ├── layouts.py           layouts A–E, any chain length
+│   │   ├── layouts.py           layouts A–F, any chain length
 │   │   └── fonts.py             BDF → TTF → built-in font resolution
 │   ├── assets/fonts/            drop extra .bdf files here
 │   └── web/                     Flask app, JSON API, HTML/CSS/JS
 ├── scripts/
 │   ├── install.sh               inspect, set up, optionally install the service
+│   ├── auto-update.sh           boot-time git update, verify, roll back
 │   ├── run-dev.sh               preview mode
 │   ├── test-matrix.sh           panel test pattern / demo / sample PNGs
 │   ├── service.sh               start/stop/restart/status/logs
@@ -915,8 +1094,9 @@ sports-scoreboard/
 │   └── show_pattern.py          the panel test pattern, on real hardware
 ├── systemd/
 │   ├── sports-scoreboard.service
+│   ├── sports-scoreboard-update.service   pull + verify before the display starts
 │   └── sports-scoreboard-preview.service
-├── tests/                       ~180 offline tests + ESPN fixtures
+├── tests/                       ~300 offline tests + ESPN fixtures
 └── var/                         runtime caches (gitignored)
 ```
 
@@ -942,6 +1122,5 @@ Not needed for version one, but genuinely worthwhile:
   schedule.
 * **A "game starting soon" alert screen** in the last few minutes before a
   favourite's kickoff.
-* **Standings and records screens** — ESPN exposes both.
 * **Authentication on the web UI** if it ever leaves a trusted LAN. Today it
   is deliberately open and deliberately LAN-only.

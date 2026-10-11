@@ -1,4 +1,5 @@
 {
+  "version": 2,
   "display": {
     "rows": 32,
     "cols": 64,
@@ -32,7 +33,12 @@
     "layout_mode": "auto",
     "final_window_hours": 12,
     "upcoming_window_hours": 36,
-    "max_screens": 12
+    "max_screens": 12,
+    "locked_game": "",
+    "lock_release_minutes": 30,
+    "show_standings": false,
+    "standings_leagues": [],
+    "standings_seconds": 20
   },
   "sleep": {
     "enabled": false,
