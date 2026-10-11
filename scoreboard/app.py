@@ -37,6 +37,7 @@ from .providers import build_provider
 from .runner import DisplayRunner
 from .scheduler import DataScheduler
 from .state import AppState
+from .standings import StandingsCache
 from .teams import TeamCatalog
 
 log = logging.getLogger("scoreboard")
@@ -177,9 +178,11 @@ def run(args: argparse.Namespace) -> int:
     )
     provider = build_provider("espn", client=http)
     catalog = TeamCatalog(provider, paths.TEAM_CACHE_DIR)
+    standings = StandingsCache(provider, paths.STANDINGS_CACHE_DIR)
 
     scheduler = DataScheduler(provider, state, store, logos=logos, stop_event=stop_event)
-    runner = DisplayRunner(display, state, store, fonts, logos=logos, stop_event=stop_event)
+    runner = DisplayRunner(display, state, store, fonts, logos=logos,
+                           stop_event=stop_event, standings=standings)
 
     def on_config_change(new_config) -> None:
         logos.enabled = new_config.display.show_logos
@@ -198,11 +201,14 @@ def run(args: argparse.Namespace) -> int:
     scheduler.start()
     for league in config.sports.enabled_leagues:
         catalog.refresh_async(league)
+    if config.rotation.show_standings:
+        for league in (config.rotation.standings_leagues or config.sports.enabled_leagues):
+            standings.refresh_async(league)
 
     web_thread = None
     if not args.no_web:
         web_thread = start_web(config, args, store, state, runner, scheduler, catalog,
-                               logos, fonts)
+                               logos, fonts, standings)
 
     install_signal_handlers(stop_event)
     try:
@@ -230,13 +236,14 @@ def run(args: argparse.Namespace) -> int:
 
 
 def start_web(config, args, store, state, runner, scheduler, catalog, logos,
-              fonts) -> threading.Thread:
+              fonts, standings=None) -> threading.Thread:
     """Start the web UI in a background thread."""
     from .web import Services, create_app
 
     services = Services(
         config_store=store, state=state, runner=runner, scheduler=scheduler,
         teams=catalog, logos=logos, fonts=fonts, version=__version__,
+        standings=standings,
     )
     app = create_app(services)
     host = args.host or config.web.host

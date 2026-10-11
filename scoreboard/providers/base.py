@@ -9,7 +9,7 @@ from __future__ import annotations
 import abc
 from typing import List
 
-from ..models import LeagueSnapshot, TeamInfo
+from ..models import LeagueSnapshot, Standings, TeamInfo
 
 
 class ProviderError(RuntimeError):
@@ -38,3 +38,12 @@ class SportsProvider(abc.ABC):
     @abc.abstractmethod
     def fetch_teams(self, league_id: str) -> List[TeamInfo]:
         """Return the full team catalog for one league."""
+
+    def fetch_standings(self, league_id: str) -> Standings:
+        """Return the league table.
+
+        Deliberately not abstract: a provider that has no standings feed is
+        still a perfectly good provider, and the display simply skips the
+        table screens. Override it where the data exists.
+        """
+        raise ProviderError(f"{self.name} does not provide standings")

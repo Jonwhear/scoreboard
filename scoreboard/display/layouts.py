@@ -27,7 +27,7 @@ from typing import Optional, Sequence, Tuple
 
 from PIL import Image, ImageDraw
 
-from ..models import Game, GameState, GameTeam
+from ..models import Game, GameState, GameTeam, StandingsGroup
 from ..rotation import Layout, ScreenItem
 from .fonts import Font, FontRegistry
 
@@ -837,6 +837,142 @@ def _draw_idle_game(
             tiny.draw_right(draw, right, 23, extra, LIVE)
 
 
+# -- layout F: league table ------------------------------------------------
+
+#: Pixels a table scrolls per second.
+TABLE_SCROLL_SPEED = 7.0
+#: Rows pause at the top and bottom of a scroll so they can be read.
+TABLE_SCROLL_PAUSE = 1.5
+TABLE_ROW_HEIGHT = 8
+TABLE_HEADER_HEIGHT = 7
+
+#: Zone colours, matched against the note ESPN attaches to a position.
+ZONE_COLORS = (
+    (("champions league", "champions-league"), (70, 130, 255)),
+    (("europa league", "europa conference", "uefa"), (255, 140, 0)),
+    (("relegation", "relegated"), (235, 60, 60)),
+    (("playoff", "clinched", "wild card", "division"), (0, 200, 110)),
+)
+
+
+def zone_color(note: Optional[str], fallback: Optional[str] = None) -> Optional[tuple]:
+    """Colour for a qualification/relegation zone, or None if it is just a row."""
+    if fallback:
+        parsed = readable(fallback, None)  # type: ignore[arg-type]
+        if parsed:
+            return parsed
+    if not note:
+        return None
+    lowered = note.lower()
+    for needles, color in ZONE_COLORS:
+        if any(needle in lowered for needle in needles):
+            return color
+    return None
+
+
+def table_scroll_offset(phase: float, content_height: int, view_height: int) -> int:
+    """How far a table of ``content_height`` has scrolled at ``phase`` seconds.
+
+    Scrolls down, pauses, and holds at the bottom; the rotation moves on
+    before it would need to loop, so there is no jarring snap back to the
+    top mid-read.
+    """
+    overflow = max(0, content_height - view_height)
+    if overflow <= 0:
+        return 0
+    travelled = max(0.0, phase - TABLE_SCROLL_PAUSE) * TABLE_SCROLL_SPEED
+    return int(min(float(overflow), travelled))
+
+
+def render_standings(
+    group: StandingsGroup,
+    context: RenderContext,
+    title: Optional[str] = None,
+) -> Image.Image:
+    """A league table that scrolls vertically as the screen is held.
+
+    One row per team: position, crest or abbreviation, the column the
+    league is ranked on, and a zone stripe down the left edge marking
+    European places and relegation.
+    """
+    canvas = new_canvas(context.width, context.height)
+    draw = ImageDraw.Draw(canvas)
+    fonts = context.fonts
+    tiny = fonts.get("tiny")
+
+    heading = title or group.name or group.league.upper()
+    tiny.draw(draw, (2, 0), tiny.fit(heading, context.width - 26), BRIGHT)
+    tiny.draw_right(draw, context.width - 2, 0, group.league.upper(), DIM)
+    _hline(draw, 0, context.width - 1, TABLE_HEADER_HEIGHT - 1, FAINT)
+
+    view_top = TABLE_HEADER_HEIGHT
+    view_height = context.height - view_top
+    content_height = max(view_height, len(group.rows) * TABLE_ROW_HEIGHT)
+    offset = table_scroll_offset(context.phase, len(group.rows) * TABLE_ROW_HEIGHT,
+                                 view_height)
+
+    # Draw the whole table into its own image and paste the visible window.
+    # Clipping by arithmetic alone lets a half-scrolled row paint its text
+    # over the header; cropping cannot.
+    body = Image.new("RGB", (context.width, content_height), BLACK)
+    body_draw = ImageDraw.Draw(body)
+    for index, row in enumerate(group.rows):
+        row_y = index * TABLE_ROW_HEIGHT
+        if row_y + TABLE_ROW_HEIGHT <= offset or row_y >= offset + view_height:
+            continue  # outside the window; no need to draw it at all
+        _draw_standings_row(body, body_draw, context, row, row_y)
+
+    window = body.crop((0, offset, context.width, offset + view_height))
+    canvas.paste(window, (0, view_top))
+
+    _draw_stale_marker(draw, context)
+    return canvas
+
+
+def _draw_standings_row(
+    canvas: Image.Image,
+    draw: ImageDraw.ImageDraw,
+    context: RenderContext,
+    row,
+    row_y: int,
+) -> None:
+    """One line of the table, drawn into the scrollable body image."""
+    fonts = context.fonts
+    tiny = fonts.get("tiny")
+    small = fonts.get("small")
+
+    stripe = zone_color(row.note, row.note_color)
+    if stripe:
+        draw.rectangle([(0, row_y), (1, row_y + TABLE_ROW_HEIGHT - 2)], fill=stripe)
+
+    rank_text = str(row.rank or "")
+    tiny.draw(draw, (4, row_y + 1), rank_text, DIM)
+    rank_width = tiny.text_width("00") + 6
+
+    value = row.primary_value
+    value_width = small.text_width(value)
+    label_x = rank_width
+    label_width = context.width - label_x - value_width - 4
+
+    drawn_logo = False
+    if context.show_logos and label_width > 22:
+        drawn_logo = paste_logo(canvas, context, _row_as_team(row),
+                                (label_x, row_y, label_x + 6, row_y + 6))
+    text_x = label_x + (8 if drawn_logo else 0)
+    small.draw(draw, (text_x, row_y + 1),
+               small.fit(row.abbreviation, max(4, context.width - text_x - value_width - 4)),
+               BRIGHT)
+    small.draw_right(draw, context.width - 2, row_y + 1, value, BRIGHT)
+
+
+def _row_as_team(row) -> GameTeam:
+    """Adapt a standings row to what the logo cache expects."""
+    return GameTeam(
+        league=row.league, team_id=row.team_id, abbreviation=row.abbreviation,
+        display_name=row.display_name, logo_url=row.logo_url, color=row.color,
+    )
+
+
 def render_message(context: RenderContext, title: str, detail: str = "") -> Image.Image:
     """A plain two-line message (startup, fatal errors, test screens)."""
     canvas = new_canvas(context.width, context.height)
@@ -902,6 +1038,8 @@ def render_screen(
             return render_upcoming(screen.games, context)
         if screen.layout is Layout.FINAL and screen.games:
             return render_finals(screen.games, context)
+        if screen.layout is Layout.STANDINGS and screen.payload is not None:
+            return render_standings(screen.payload, context, title=screen.title)
         return render_idle(context, next_game=next_game, online=online)
     except Exception:
         log.exception("Layout %s failed; showing fallback frame", screen.layout)

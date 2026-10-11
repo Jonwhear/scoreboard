@@ -53,6 +53,7 @@ class DisplayRunner(threading.Thread):
         fonts: FontRegistry,
         logos: Optional[LogoCache] = None,
         stop_event: Optional[threading.Event] = None,
+        standings: Optional[object] = None,
     ) -> None:
         super().__init__(name="display-loop", daemon=True)
         self.display = display
@@ -60,6 +61,7 @@ class DisplayRunner(threading.Thread):
         self.config_store = config_store
         self.fonts = fonts
         self.logos = logos
+        self.standings = standings
         self._stop_event = stop_event or threading.Event()
         self._lock = threading.Lock()
         self._rotator = Rotator(config_store.config.rotation.screen_seconds)
@@ -155,7 +157,9 @@ class DisplayRunner(threading.Thread):
         self._rotator.screen_seconds = config.rotation.screen_seconds
         if self._last_playlist is None or monotonic_now - self._last_playlist >= PLAYLIST_INTERVAL:
             games = self.state.games()
-            self._rotator.set_playlist(build_playlist(games, config))
+            self._rotator.set_playlist(
+                build_playlist(games, config, standings=self._standings_for(config))
+            )
             self._last_playlist = monotonic_now
 
         with self._lock:
@@ -264,6 +268,22 @@ class DisplayRunner(threading.Thread):
                 log.debug("Test screen %r expired", name)
                 return None
             return name
+
+    def _standings_for(self, config) -> Optional[dict]:
+        """Tables for the leagues whose standings are switched on.
+
+        Asking the cache is what triggers its background refresh, so this
+        is deliberately called even before the tables are populated.
+        """
+        if self.standings is None or not config.rotation.show_standings:
+            return None
+        wanted = config.rotation.standings_leagues or config.sports.enabled_leagues
+        tables = {}
+        for league in wanted:
+            table = self.standings.get(league)
+            if table is not None and table.groups:
+                tables[league] = table
+        return tables or None
 
     def _idle_item(self, config, monotonic_now: float) -> Optional[Game]:
         """The game the idle screen should show right now, cycling slowly."""

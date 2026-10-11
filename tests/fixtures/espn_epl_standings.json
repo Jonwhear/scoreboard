@@ -1,0 +1,500 @@
+{
+ "name": "English Premier League",
+ "abbreviation": "ENG.1",
+ "standings": {
+  "id": "0",
+  "name": "Overall",
+  "entries": [
+   {
+    "team": {
+     "id": "359",
+     "abbreviation": "ARS",
+     "displayName": "Arsenal",
+     "color": "ef0107",
+     "logos": [
+      {
+       "href": "https://a.espncdn.com/i/teamlogos/soccer/500/359.png"
+      }
+     ]
+    },
+    "stats": [
+     {
+      "name": "rank",
+      "value": 1,
+      "displayValue": "1"
+     },
+     {
+      "name": "gamesPlayed",
+      "value": 8,
+      "displayValue": "8"
+     },
+     {
+      "name": "wins",
+      "value": 6,
+      "displayValue": "6"
+     },
+     {
+      "name": "ties",
+      "value": 1,
+      "displayValue": "1"
+     },
+     {
+      "name": "losses",
+      "value": 1,
+      "displayValue": "1"
+     },
+     {
+      "name": "points",
+      "value": 19,
+      "displayValue": "19"
+     },
+     {
+      "name": "pointDifferential",
+      "value": 11,
+      "displayValue": "11"
+     }
+    ],
+    "note": {
+     "description": "UEFA Champions League",
+     "color": "2b5fb3",
+     "rank": 1
+    }
+   },
+   {
+    "team": {
+     "id": "364",
+     "abbreviation": "LIV",
+     "displayName": "Liverpool",
+     "color": "ef0107",
+     "logos": [
+      {
+       "href": "https://a.espncdn.com/i/teamlogos/soccer/500/364.png"
+      }
+     ]
+    },
+    "stats": [
+     {
+      "name": "rank",
+      "value": 2,
+      "displayValue": "2"
+     },
+     {
+      "name": "gamesPlayed",
+      "value": 8,
+      "displayValue": "8"
+     },
+     {
+      "name": "wins",
+      "value": 6,
+      "displayValue": "6"
+     },
+     {
+      "name": "ties",
+      "value": 0,
+      "displayValue": "0"
+     },
+     {
+      "name": "losses",
+      "value": 2,
+      "displayValue": "2"
+     },
+     {
+      "name": "points",
+      "value": 18,
+      "displayValue": "18"
+     },
+     {
+      "name": "pointDifferential",
+      "value": 8,
+      "displayValue": "8"
+     }
+    ],
+    "note": {
+     "description": "UEFA Champions League",
+     "color": "2b5fb3",
+     "rank": 2
+    }
+   },
+   {
+    "team": {
+     "id": "382",
+     "abbreviation": "MAN",
+     "displayName": "Manchester City",
+     "color": "ef0107",
+     "logos": [
+      {
+       "href": "https://a.espncdn.com/i/teamlogos/soccer/500/382.png"
+      }
+     ]
+    },
+    "stats": [
+     {
+      "name": "rank",
+      "value": 3,
+      "displayValue": "3"
+     },
+     {
+      "name": "gamesPlayed",
+      "value": 8,
+      "displayValue": "8"
+     },
+     {
+      "name": "wins",
+      "value": 5,
+      "displayValue": "5"
+     },
+     {
+      "name": "ties",
+      "value": 2,
+      "displayValue": "2"
+     },
+     {
+      "name": "losses",
+      "value": 1,
+      "displayValue": "1"
+     },
+     {
+      "name": "points",
+      "value": 17,
+      "displayValue": "17"
+     },
+     {
+      "name": "pointDifferential",
+      "value": 9,
+      "displayValue": "9"
+     }
+    ],
+    "note": {
+     "description": "UEFA Champions League",
+     "color": "2b5fb3",
+     "rank": 3
+    }
+   },
+   {
+    "team": {
+     "id": "363",
+     "abbreviation": "TOT",
+     "displayName": "Tottenham Hotspur",
+     "color": "ef0107",
+     "logos": [
+      {
+       "href": "https://a.espncdn.com/i/teamlogos/soccer/500/363.png"
+      }
+     ]
+    },
+    "stats": [
+     {
+      "name": "rank",
+      "value": 4,
+      "displayValue": "4"
+     },
+     {
+      "name": "gamesPlayed",
+      "value": 8,
+      "displayValue": "8"
+     },
+     {
+      "name": "wins",
+      "value": 5,
+      "displayValue": "5"
+     },
+     {
+      "name": "ties",
+      "value": 2,
+      "displayValue": "2"
+     },
+     {
+      "name": "losses",
+      "value": 1,
+      "displayValue": "1"
+     },
+     {
+      "name": "points",
+      "value": 17,
+      "displayValue": "17"
+     },
+     {
+      "name": "pointDifferential",
+      "value": 10,
+      "displayValue": "10"
+     }
+    ],
+    "note": {
+     "description": "UEFA Champions League",
+     "color": "2b5fb3",
+     "rank": 4
+    }
+   },
+   {
+    "team": {
+     "id": "331",
+     "abbreviation": "MUN",
+     "displayName": "Manchester United",
+     "color": "ef0107",
+     "logos": [
+      {
+       "href": "https://a.espncdn.com/i/teamlogos/soccer/500/331.png"
+      }
+     ]
+    },
+    "stats": [
+     {
+      "name": "rank",
+      "value": 5,
+      "displayValue": "5"
+     },
+     {
+      "name": "gamesPlayed",
+      "value": 8,
+      "displayValue": "8"
+     },
+     {
+      "name": "wins",
+      "value": 4,
+      "displayValue": "4"
+     },
+     {
+      "name": "ties",
+      "value": 2,
+      "displayValue": "2"
+     },
+     {
+      "name": "losses",
+      "value": 2,
+      "displayValue": "2"
+     },
+     {
+      "name": "points",
+      "value": 14,
+      "displayValue": "14"
+     },
+     {
+      "name": "pointDifferential",
+      "value": 3,
+      "displayValue": "3"
+     }
+    ],
+    "note": {
+     "description": "UEFA Europa League",
+     "color": "ff7900",
+     "rank": 5
+    }
+   },
+   {
+    "team": {
+     "id": "360",
+     "abbreviation": "CHE",
+     "displayName": "Chelsea",
+     "color": "ef0107",
+     "logos": [
+      {
+       "href": "https://a.espncdn.com/i/teamlogos/soccer/500/360.png"
+      }
+     ]
+    },
+    "stats": [
+     {
+      "name": "rank",
+      "value": 6,
+      "displayValue": "6"
+     },
+     {
+      "name": "gamesPlayed",
+      "value": 8,
+      "displayValue": "8"
+     },
+     {
+      "name": "wins",
+      "value": 4,
+      "displayValue": "4"
+     },
+     {
+      "name": "ties",
+      "value": 1,
+      "displayValue": "1"
+     },
+     {
+      "name": "losses",
+      "value": 3,
+      "displayValue": "3"
+     },
+     {
+      "name": "points",
+      "value": 13,
+      "displayValue": "13"
+     },
+     {
+      "name": "pointDifferential",
+      "value": 4,
+      "displayValue": "4"
+     }
+    ]
+   },
+   {
+    "team": {
+     "id": "349",
+     "abbreviation": "BUR",
+     "displayName": "Burnley",
+     "color": "ef0107",
+     "logos": [
+      {
+       "href": "https://a.espncdn.com/i/teamlogos/soccer/500/349.png"
+      }
+     ]
+    },
+    "stats": [
+     {
+      "name": "rank",
+      "value": 18,
+      "displayValue": "18"
+     },
+     {
+      "name": "gamesPlayed",
+      "value": 8,
+      "displayValue": "8"
+     },
+     {
+      "name": "wins",
+      "value": 1,
+      "displayValue": "1"
+     },
+     {
+      "name": "ties",
+      "value": 2,
+      "displayValue": "2"
+     },
+     {
+      "name": "losses",
+      "value": 5,
+      "displayValue": "5"
+     },
+     {
+      "name": "points",
+      "value": 5,
+      "displayValue": "5"
+     },
+     {
+      "name": "pointDifferential",
+      "value": -9,
+      "displayValue": "-9"
+     }
+    ],
+    "note": {
+     "description": "Relegation",
+     "color": "e51c23",
+     "rank": 18
+    }
+   },
+   {
+    "team": {
+     "id": "371",
+     "abbreviation": "WOL",
+     "displayName": "Wolverhampton",
+     "color": "ef0107",
+     "logos": [
+      {
+       "href": "https://a.espncdn.com/i/teamlogos/soccer/500/371.png"
+      }
+     ]
+    },
+    "stats": [
+     {
+      "name": "rank",
+      "value": 19,
+      "displayValue": "19"
+     },
+     {
+      "name": "gamesPlayed",
+      "value": 8,
+      "displayValue": "8"
+     },
+     {
+      "name": "wins",
+      "value": 0,
+      "displayValue": "0"
+     },
+     {
+      "name": "ties",
+      "value": 3,
+      "displayValue": "3"
+     },
+     {
+      "name": "losses",
+      "value": 5,
+      "displayValue": "5"
+     },
+     {
+      "name": "points",
+      "value": 3,
+      "displayValue": "3"
+     },
+     {
+      "name": "pointDifferential",
+      "value": -11,
+      "displayValue": "-11"
+     }
+    ],
+    "note": {
+     "description": "Relegation",
+     "color": "e51c23",
+     "rank": 19
+    }
+   },
+   {
+    "team": {
+     "id": "392",
+     "abbreviation": "LEE",
+     "displayName": "Leeds United",
+     "color": "ef0107",
+     "logos": [
+      {
+       "href": "https://a.espncdn.com/i/teamlogos/soccer/500/392.png"
+      }
+     ]
+    },
+    "stats": [
+     {
+      "name": "rank",
+      "value": 20,
+      "displayValue": "20"
+     },
+     {
+      "name": "gamesPlayed",
+      "value": 8,
+      "displayValue": "8"
+     },
+     {
+      "name": "wins",
+      "value": 0,
+      "displayValue": "0"
+     },
+     {
+      "name": "ties",
+      "value": 2,
+      "displayValue": "2"
+     },
+     {
+      "name": "losses",
+      "value": 6,
+      "displayValue": "6"
+     },
+     {
+      "name": "points",
+      "value": 2,
+      "displayValue": "2"
+     },
+     {
+      "name": "pointDifferential",
+      "value": -14,
+      "displayValue": "-14"
+     }
+    ],
+    "note": {
+     "description": "Relegation",
+     "color": "e51c23",
+     "rank": 20
+    }
+   }
+  ]
+ }
+}

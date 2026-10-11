@@ -18,6 +18,7 @@ DEFAULT_CONFIG_PATH = os.path.join(CONFIG_DIR, "config.json")
 VAR_DIR = os.path.join(PROJECT_ROOT, "var")
 LOGO_CACHE_DIR = os.path.join(VAR_DIR, "logos")
 TEAM_CACHE_DIR = os.path.join(VAR_DIR, "teams")
+STANDINGS_CACHE_DIR = os.path.join(VAR_DIR, "standings")
 HTTP_CACHE_DIR = os.path.join(VAR_DIR, "http")
 FONT_CACHE_DIR = os.path.join(VAR_DIR, "fonts")
 
@@ -33,5 +34,5 @@ def config_path() -> str:
 def ensure_directories() -> None:
     """Create the writable directories the app needs."""
     for directory in (CONFIG_DIR, VAR_DIR, LOGO_CACHE_DIR, TEAM_CACHE_DIR,
-                      HTTP_CACHE_DIR, FONT_CACHE_DIR):
+                      STANDINGS_CACHE_DIR, HTTP_CACHE_DIR, FONT_CACHE_DIR):
         os.makedirs(directory, exist_ok=True)

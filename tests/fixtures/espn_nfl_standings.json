@@ -1,0 +1,140 @@
+{
+ "children": [
+  {
+   "name": "American Football Conference",
+   "abbreviation": "AFC",
+   "standings": {
+    "entries": [
+     {
+      "team": {
+       "id": "2",
+       "abbreviation": "BUF",
+       "displayName": "Buffalo Bills",
+       "color": "4f2683"
+      },
+      "stats": [
+       {
+        "name": "wins",
+        "value": 5,
+        "displayValue": "5"
+       },
+       {
+        "name": "losses",
+        "value": 1,
+        "displayValue": "1"
+       },
+       {
+        "name": "ties",
+        "value": 0,
+        "displayValue": "0"
+       },
+       {
+        "name": "gamesBehind",
+        "value": 0,
+        "displayValue": "0"
+       }
+      ]
+     },
+     {
+      "team": {
+       "id": "12",
+       "abbreviation": "KC",
+       "displayName": "Kansas City Chiefs",
+       "color": "4f2683"
+      },
+      "stats": [
+       {
+        "name": "wins",
+        "value": 4,
+        "displayValue": "4"
+       },
+       {
+        "name": "losses",
+        "value": 2,
+        "displayValue": "2"
+       },
+       {
+        "name": "ties",
+        "value": 0,
+        "displayValue": "0"
+       },
+       {
+        "name": "gamesBehind",
+        "value": 1,
+        "displayValue": "1"
+       }
+      ]
+     }
+    ]
+   }
+  },
+  {
+   "name": "National Football Conference",
+   "abbreviation": "NFC",
+   "standings": {
+    "entries": [
+     {
+      "team": {
+       "id": "21",
+       "abbreviation": "PHI",
+       "displayName": "Philadelphia Eagles",
+       "color": "4f2683"
+      },
+      "stats": [
+       {
+        "name": "wins",
+        "value": 5,
+        "displayValue": "5"
+       },
+       {
+        "name": "losses",
+        "value": 1,
+        "displayValue": "1"
+       },
+       {
+        "name": "ties",
+        "value": 0,
+        "displayValue": "0"
+       },
+       {
+        "name": "gamesBehind",
+        "value": 0,
+        "displayValue": "0"
+       }
+      ]
+     },
+     {
+      "team": {
+       "id": "16",
+       "abbreviation": "MIN",
+       "displayName": "Minnesota Vikings",
+       "color": "4f2683"
+      },
+      "stats": [
+       {
+        "name": "wins",
+        "value": 3,
+        "displayValue": "3"
+       },
+       {
+        "name": "losses",
+        "value": 3,
+        "displayValue": "3"
+       },
+       {
+        "name": "ties",
+        "value": 0,
+        "displayValue": "0"
+       },
+       {
+        "name": "gamesBehind",
+        "value": 2,
+        "displayValue": "2"
+       }
+      ]
+     }
+    ]
+   }
+  }
+ ]
+}

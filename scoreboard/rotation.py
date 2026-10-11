@@ -20,7 +20,7 @@ import logging
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta, timezone
 from enum import Enum
-from typing import FrozenSet, Iterable, List, Optional, Sequence
+from typing import Dict, FrozenSet, Iterable, List, Optional, Sequence
 
 from .config import Config
 from .models import Game
@@ -40,6 +40,7 @@ class ScreenKind(str, Enum):
     FAVORITE_FINAL = "favorite_final"
     UPCOMING = "upcoming"
     FINAL = "final"
+    STANDINGS = "standings"
     IDLE = "idle"
 
 
@@ -51,6 +52,7 @@ class Layout(str, Enum):
     UPCOMING = "upcoming"   # layout C
     FINAL = "final"         # layout D
     IDLE = "idle"           # layout E
+    STANDINGS = "standings" # layout F: a scrolling league table
 
 
 #: Lower sorts first.
@@ -62,6 +64,9 @@ _KIND_PRIORITY = {
     ScreenKind.FAVORITE_FINAL: 3,
     ScreenKind.UPCOMING: 4,
     ScreenKind.FINAL: 5,
+    # Tables are reference material rather than news, so they come after
+    # anything actually happening, but before the idle clock.
+    ScreenKind.STANDINGS: 6,
     ScreenKind.IDLE: 9,
 }
 
@@ -75,6 +80,11 @@ class ScreenItem:
     games: List[Game] = field(default_factory=list)
     title: str = ""
     detail: str = ""
+    #: Overrides rotation.screen_seconds for this screen. A league table
+    #: needs long enough to scroll; a score does not.
+    duration: Optional[float] = None
+    #: Carried for layouts that are not about games (a standings table).
+    payload: Optional[object] = None
 
     @property
     def priority(self) -> int:
@@ -143,6 +153,7 @@ def build_playlist(
     config: Config,
     now: Optional[datetime] = None,
     favorite_keys: Optional[FrozenSet[str]] = None,
+    standings: Optional[Dict[str, object]] = None,
 ) -> List[ScreenItem]:
     """Build the ordered playlist of screens for the current game set."""
     now = now or datetime.now(timezone.utc)
@@ -237,6 +248,8 @@ def build_playlist(
                      group_layout=Layout.FINAL, single_layout=Layout.FINAL)
         )
 
+    screens.extend(_standings_screens(standings, config))
+
     screens.sort(key=lambda screen: screen.priority)
     if rotation.max_screens and len(screens) > rotation.max_screens:
         log.debug("Trimming playlist from %d to %d screens", len(screens), rotation.max_screens)
@@ -244,6 +257,28 @@ def build_playlist(
 
     if not screens:
         screens.append(ScreenItem(ScreenKind.IDLE, Layout.IDLE, [], title="Idle"))
+    return screens
+
+
+def _standings_screens(standings: Optional[Dict[str, object]], config) -> List[ScreenItem]:
+    """One screen per published table, for the leagues that are turned on."""
+    rotation = config.rotation
+    if not rotation.show_standings or not standings:
+        return []
+    wanted = rotation.standings_leagues or config.sports.enabled_leagues
+    screens: List[ScreenItem] = []
+    for league in wanted:
+        table = standings.get(league)
+        if table is None or not getattr(table, "groups", None):
+            continue
+        for group in table.groups:
+            if not group.rows:
+                continue
+            screens.append(ScreenItem(
+                ScreenKind.STANDINGS, Layout.STANDINGS, [],
+                title=group.name or league.upper(), detail="standings",
+                duration=float(rotation.standings_seconds), payload=group,
+            ))
     return screens
 
 
@@ -323,6 +358,13 @@ class Rotator:
         self._index %= len(self._playlist)
         return self._playlist[self._index]
 
+    def current_duration(self) -> float:
+        """How long the current screen should stay up."""
+        screen = self.current()
+        if screen is not None and screen.duration:
+            return max(1.0, float(screen.duration))
+        return float(max(1, self.screen_seconds))
+
     def tick(self, monotonic_now: float) -> ScreenItem:
         """Return the screen to display now, advancing when its time is up."""
         if not self._playlist:
@@ -331,7 +373,7 @@ class Rotator:
             self._shown_at = monotonic_now
         if self._shown_at is None:
             self._shown_at = monotonic_now
-        elif monotonic_now - self._shown_at >= max(1, self.screen_seconds):
+        elif monotonic_now - self._shown_at >= self.current_duration():
             self.advance(monotonic_now)
         return self.current()  # type: ignore[return-value]
 

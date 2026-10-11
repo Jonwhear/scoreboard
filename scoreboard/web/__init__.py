@@ -28,6 +28,7 @@ class Services:
     teams: Optional[object] = None
     logos: Optional[object] = None
     fonts: Optional[object] = None
+    standings: Optional[object] = None
     version: str = "0"
 
 

@@ -261,3 +261,134 @@ class LeagueSnapshot:
     @property
     def ok(self) -> bool:
         return self.error is None
+
+
+@dataclass
+class StandingsRow:
+    """One team's line in a league table."""
+
+    league: str
+    team_id: str
+    abbreviation: str
+    display_name: str
+    rank: Optional[int] = None
+    played: Optional[int] = None
+    wins: Optional[int] = None
+    losses: Optional[int] = None
+    draws: Optional[int] = None
+    #: Points for soccer; for the US leagues this is left unset and the
+    #: record is what matters.
+    points: Optional[int] = None
+    goal_difference: Optional[int] = None
+    #: Games behind the leader, where the league thinks in those terms.
+    games_behind: Optional[str] = None
+    logo_url: Optional[str] = None
+    color: Optional[str] = None
+    #: What the league says this position earns, e.g. "UEFA Champions
+    #: League" or "Relegation". Soccer tables are mostly meaningless
+    #: without it.
+    note: Optional[str] = None
+    note_color: Optional[str] = None
+
+    @property
+    def key(self) -> str:
+        return team_key(self.league, self.team_id)
+
+    @property
+    def record(self) -> str:
+        """``W-L`` or ``W-D-L``, in the form this league actually uses.
+
+        Soccer always shows draws; the US leagues only mention a tie when
+        there has been one, so an NFL team reads 5-1 rather than 5-0-1.
+        """
+        from .leagues import get_league
+
+        league = get_league(self.league)
+        show_draws = self.draws is not None and (
+            (league is not None and league.allows_draw) or self.draws > 0
+        )
+        parts = [self.wins, self.draws, self.losses] if show_draws \
+            else [self.wins, self.losses]
+        if any(value is None for value in parts):
+            return ""
+        return "-".join(str(value) for value in parts)
+
+    @property
+    def primary_value(self) -> str:
+        """The column this league is actually ranked on.
+
+        Points where a league keeps them (soccer, NHL), otherwise the
+        win-loss record. Games behind is a distant third: it reads "0" for
+        every division leader, which tells you nothing.
+        """
+        if self.points is not None:
+            return str(self.points)
+        record = self.record
+        if record:
+            return record
+        return self.games_behind or ""
+
+    def to_dict(self) -> Dict[str, Any]:
+        return {
+            "league": self.league,
+            "team_id": self.team_id,
+            "abbreviation": self.abbreviation,
+            "display_name": self.display_name,
+            "rank": self.rank,
+            "played": self.played,
+            "wins": self.wins,
+            "losses": self.losses,
+            "draws": self.draws,
+            "points": self.points,
+            "goal_difference": self.goal_difference,
+            "games_behind": self.games_behind,
+            "logo_url": self.logo_url,
+            "color": self.color,
+            "note": self.note,
+            "note_color": self.note_color,
+            "record": self.record,
+        }
+
+
+@dataclass
+class StandingsGroup:
+    """A table: a whole league, or one conference/division/group of it."""
+
+    league: str
+    name: str
+    rows: List[StandingsRow] = field(default_factory=list)
+
+    def to_dict(self) -> Dict[str, Any]:
+        return {
+            "league": self.league,
+            "name": self.name,
+            "rows": [row.to_dict() for row in self.rows],
+        }
+
+
+@dataclass
+class Standings:
+    """Every table a league publishes, plus when we fetched it."""
+
+    league: str
+    groups: List[StandingsGroup] = field(default_factory=list)
+    fetched_at: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
+    stale: bool = False
+    error: Optional[str] = None
+
+    @property
+    def ok(self) -> bool:
+        return self.error is None and bool(self.groups)
+
+    @property
+    def row_count(self) -> int:
+        return sum(len(group.rows) for group in self.groups)
+
+    def to_dict(self) -> Dict[str, Any]:
+        return {
+            "league": self.league,
+            "groups": [group.to_dict() for group in self.groups],
+            "fetched_at": self.fetched_at.isoformat(),
+            "stale": self.stale,
+            "error": self.error,
+        }

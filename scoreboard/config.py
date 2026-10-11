@@ -223,6 +223,13 @@ class RotationConfig:
     #: Minutes after a locked game goes final before the lock releases
     #: itself. 0 keeps it locked until you clear it.
     lock_release_minutes: int = 30
+    #: League tables in the rotation.
+    show_standings: bool = False
+    #: Which leagues' tables to show. Empty means every enabled league
+    #: that publishes one.
+    standings_leagues: List[str] = field(default_factory=list)
+    #: Tables get their own, longer dwell so a full table can scroll past.
+    standings_seconds: int = 20
 
     @classmethod
     def from_dict(cls, data: Dict[str, Any]) -> "RotationConfig":
@@ -243,6 +250,9 @@ class RotationConfig:
             max_screens=_clamp_int(data.get("max_screens"), 1, 60, 12),
             locked_game=str(data.get("locked_game", "") or "").strip(),
             lock_release_minutes=_clamp_int(data.get("lock_release_minutes"), 0, 1440, 30),
+            show_standings=_as_bool(data.get("show_standings"), False),
+            standings_leagues=filter_known(data.get("standings_leagues") or []),
+            standings_seconds=_clamp_int(data.get("standings_seconds"), 5, 120, 20),
         )
 
 

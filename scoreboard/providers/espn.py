@@ -18,12 +18,15 @@ from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional, Sequence
 
 from ..httpclient import FetchError, HttpClient
-from ..models import Game, GameState, GameTeam, LeagueSnapshot, TeamInfo, normalize_color
+from ..models import (Game, GameState, GameTeam, LeagueSnapshot, Standings,
+                      StandingsGroup, StandingsRow, TeamInfo, normalize_color)
 from .base import ProviderError, SportsProvider
 
 log = logging.getLogger(__name__)
 
 SITE_API = "https://site.api.espn.com/apis/site/v2/sports"
+#: Standings live under a different API version to the scoreboard.
+STANDINGS_API = "https://site.api.espn.com/apis/v2/sports"
 
 
 @dataclass(frozen=True)
@@ -38,6 +41,10 @@ class _EspnLeague:
     @property
     def base(self) -> str:
         return f"{SITE_API}/{self.sport}/{self.path}"
+
+    @property
+    def standings_base(self) -> str:
+        return f"{STANDINGS_API}/{self.sport}/{self.path}"
 
 
 #: Canonical league id -> ESPN endpoint description.
@@ -171,7 +178,144 @@ class EspnProvider(SportsProvider):
         result = self.client.get_json(url, params=params, cache_key=f"teams-{league_id}")
         return self.parse_teams(league_id, result.data)
 
+    def fetch_standings(self, league_id: str) -> Standings:
+        endpoint = ESPN_LEAGUES.get(league_id)
+        if endpoint is None:
+            return Standings(league=league_id, error=f"league {league_id!r} not supported")
+        url = f"{endpoint.standings_base}/standings"
+        try:
+            result = self.client.get_json(url, cache_key=f"standings-{league_id}")
+        except FetchError as exc:
+            log.warning("Standings fetch failed for %s: %s", league_id, exc)
+            return Standings(league=league_id, error=str(exc))
+
+        groups = self.parse_standings(league_id, result.data)
+        standings = Standings(
+            league=league_id,
+            groups=groups,
+            fetched_at=result.fetched_at,
+            stale=result.from_cache,
+            error=None if groups else "no standings in response",
+        )
+        log.info("%s: standings for %d team(s) in %d table(s)%s",
+                 league_id, standings.row_count, len(groups),
+                 " [stale cache]" if result.from_cache else "")
+        return standings
+
     # -- parsing (pure functions over already-decoded JSON) ---------------
+
+    def parse_standings(self, league_id: str, payload: Any) -> List[StandingsGroup]:
+        """Normalize a standings payload.
+
+        ESPN returns either a single table or a list of conference /
+        division / group children, so handle both and skip anything we
+        cannot read rather than losing the whole table to one odd entry.
+        """
+        groups: List[StandingsGroup] = []
+        children = _dig(payload, "children", default=None)
+        if isinstance(children, list) and children:
+            for child in children:
+                entries = _dig(child, "standings", "entries", default=[])
+                name = _as_str(_dig(child, "name")) or _as_str(_dig(child, "abbreviation"))
+                group = self._parse_standings_group(league_id, name, entries)
+                if group.rows:
+                    groups.append(group)
+        else:
+            entries = _dig(payload, "standings", "entries", default=[])
+            name = _as_str(_dig(payload, "name")) or league_id.upper()
+            group = self._parse_standings_group(league_id, name, entries)
+            if group.rows:
+                groups.append(group)
+        if not groups:
+            log.warning("%s: no usable standings entries in response", league_id)
+        return groups
+
+    def _parse_standings_group(
+        self, league_id: str, name: str, entries: Any
+    ) -> StandingsGroup:
+        rows: List[StandingsRow] = []
+        if not isinstance(entries, list):
+            return StandingsGroup(league=league_id, name=name)
+        for entry in entries:
+            try:
+                row = self._parse_standings_row(league_id, entry)
+            except Exception:
+                log.exception("%s: skipping unreadable standings entry", league_id)
+                continue
+            if row is not None:
+                rows.append(row)
+        # Trust an explicit rank where there is one; otherwise keep the
+        # order ESPN sent, which is already the table order.
+        if rows and all(row.rank for row in rows):
+            rows.sort(key=lambda row: row.rank or 0)
+        else:
+            for position, row in enumerate(rows, start=1):
+                if not row.rank:
+                    row.rank = position
+        return StandingsGroup(league=league_id, name=name, rows=rows)
+
+    def _parse_standings_row(self, league_id: str, entry: Any) -> Optional[StandingsRow]:
+        if not isinstance(entry, dict):
+            return None
+        raw_team = _dig(entry, "team", default={})
+        team_id = _as_str(_dig(raw_team, "id"))
+        if not team_id:
+            return None
+
+        stats = {}
+        for stat in _dig(entry, "stats", default=[]) or []:
+            if isinstance(stat, dict):
+                stat_name = _as_str(stat.get("name")) or _as_str(stat.get("abbreviation"))
+                if stat_name:
+                    stats[stat_name] = stat
+
+        def number(*names: str) -> Optional[int]:
+            for stat_name in names:
+                stat = stats.get(stat_name)
+                if stat is None:
+                    continue
+                value = _as_int(stat.get("value"))
+                if value is None:
+                    value = _as_int(stat.get("displayValue"))
+                if value is not None:
+                    return value
+            return None
+
+        def text(*names: str) -> Optional[str]:
+            for stat_name in names:
+                stat = stats.get(stat_name)
+                if stat is not None:
+                    display = _as_str(stat.get("displayValue"))
+                    if display:
+                        return display
+            return None
+
+        abbreviation = _as_str(raw_team.get("abbreviation")).upper()
+        display_name = _as_str(raw_team.get("displayName")) or _as_str(raw_team.get("name"))
+        if not abbreviation:
+            abbreviation = (_as_str(raw_team.get("shortDisplayName")) or display_name)[:4].upper()
+
+        return StandingsRow(
+            league=league_id,
+            team_id=team_id,
+            abbreviation=abbreviation,
+            display_name=display_name,
+            rank=number("rank", "playoffSeed"),
+            played=number("gamesPlayed"),
+            wins=number("wins"),
+            losses=number("losses"),
+            # ESPN calls a draw a "tie"; soccer tables need it, the US
+            # leagues mostly do not have one.
+            draws=number("ties", "draws"),
+            points=number("points"),
+            goal_difference=number("pointDifferential", "goalDifferential",
+                                   "differential"),
+            games_behind=text("gamesBehind"),
+            logo_url=self._logo_url(raw_team),
+            color=normalize_color(raw_team.get("color")),
+            note=_as_str(_dig(entry, "note", "description")) or None,
+            note_color=normalize_color(_dig(entry, "note", "color")),
+        )
 
     def parse_scoreboard(self, league_id: str, payload: Any) -> List[Game]:
         """Normalize a scoreboard payload, skipping events we cannot read."""
