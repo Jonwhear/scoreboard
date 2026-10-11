@@ -1,0 +1,37 @@
+# Pull the latest code before the scoreboard starts.
+#
+# Installed by scripts/install.sh --service --auto-update, which substitutes
+# __INSTALL_DIR__ and __RUN_USER__.
+#
+# Ordered Before= the scoreboard, and the scoreboard Wants= this, so a boot
+# always runs on the newest commit without anyone attaching a screen. It runs
+# as __RUN_USER__, not root: pulling code does not need privileges, and the
+# checkout is owned by that account anyway.
+#
+# A failure here never blocks the scoreboard. The script exits 0 for every
+# expected condition (offline, no new commits, local edits) and rolls back a
+# commit that cannot start, so the panels come up either way.
+
+[Unit]
+Description=Update the sports scoreboard from git
+Documentation=file://__INSTALL_DIR__/README.md
+After=network-online.target time-sync.target
+Wants=network-online.target
+Before=sports-scoreboard.service
+
+[Service]
+Type=oneshot
+RemainAfterExit=no
+User=__RUN_USER__
+WorkingDirectory=__INSTALL_DIR__
+Environment=PYTHONUNBUFFERED=1
+ExecStart=__INSTALL_DIR__/scripts/auto-update.sh
+# Generous, because a dependency install on a Pi is not quick -- but bounded,
+# so a hung fetch cannot stop the panels coming up.
+TimeoutStartSec=600
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=sports-scoreboard-update
+
+[Install]
+WantedBy=multi-user.target

@@ -59,6 +59,10 @@ def build_parser() -> argparse.ArgumentParser:
                         help="also write each frame to this PNG path")
     parser.add_argument("--log-level", default=os.environ.get("SCOREBOARD_LOG_LEVEL", "INFO"),
                         choices=["DEBUG", "INFO", "WARNING", "ERROR"])
+    parser.add_argument("--check-only", action="store_true",
+                        help="load the configuration, build every component and exit. "
+                             "Used by the auto-updater to prove a new commit starts "
+                             "before letting the service have it.")
     parser.add_argument("--strict-hardware", action="store_true",
                         help="exit if the matrix cannot be initialized instead of "
                              "falling back to preview mode")
@@ -144,6 +148,62 @@ def _warn_about_unwritable(writable, username) -> None:
         "configuration changes will fail. Fix with: sudo chown -R %s %s",
         username, ", ".join(problems), username, " ".join(problems),
     )
+
+
+def check_only(args: argparse.Namespace) -> int:
+    """Build everything the service builds, touch no hardware, and exit.
+
+    This is the auto-updater's safety check: if a new commit cannot get
+    this far -- a syntax error, a missing dependency, a config the loader
+    rejects -- it is rolled back rather than left to fail on a Pi with no
+    screen attached.
+    """
+    configure_logging(args.log_level)
+    paths.ensure_directories()
+    log.info("sports-scoreboard %s startup check", __version__)
+
+    store = ConfigStore(args.config or paths.config_path())
+    config = store.load()
+
+    fonts = FontRegistry(cache_dir=paths.FONT_CACHE_DIR)
+    for role in ("tiny", "small", "medium", "large", "score"):
+        fonts.get(role)
+
+    state = AppState()
+    logos = LogoCache(paths.LOGO_CACHE_DIR, enabled=False)
+    http = HttpClient(cache_dir=paths.HTTP_CACHE_DIR, timeout=1.0, retries=0)
+    try:
+        provider = build_provider("espn", client=http)
+        catalog = TeamCatalog(provider, paths.TEAM_CACHE_DIR)
+        standings = StandingsCache(provider, paths.STANDINGS_CACHE_DIR)
+        scheduler = DataScheduler(provider, state, store, logos=logos)
+
+        # Render one frame of every layout through the real pipeline. A
+        # layout that raises is exactly the kind of breakage that would
+        # otherwise only show up on the panels.
+        display = PreviewDisplay(config.display)
+        display.start()
+        runner = DisplayRunner(display, state, store, fonts, logos=logos,
+                               standings=standings)
+        runner._tick(0.0)
+        if display.image is None:
+            log.error("Startup check: no frame was rendered")
+            return 1
+
+        if not args.no_web:
+            from .web import Services, create_app
+
+            create_app(Services(config_store=store, state=state, runner=runner,
+                                scheduler=scheduler, teams=catalog, logos=logos,
+                                fonts=fonts, standings=standings,
+                                version=__version__))
+    finally:
+        http.close()
+
+    log.info("Startup check passed: %dx%d canvas, %d league(s) configured",
+             config.display.width, config.display.height,
+             len(config.sports.enabled_leagues))
+    return 0
 
 
 def run(args: argparse.Namespace) -> int:
@@ -285,6 +345,8 @@ def install_signal_handlers(stop_event: threading.Event) -> None:
 def main(argv: Optional[list] = None) -> int:
     args = build_parser().parse_args(argv)
     try:
+        if args.check_only:
+            return check_only(args)
         return run(args)
     except Exception:
         logging.getLogger("scoreboard").exception("Fatal error during startup")

@@ -313,3 +313,31 @@ def test_favourites_round_trip_through_a_save(tmp_path):
     assert reloaded.sports.favorite_teams[0].display_name == "Minnesota Vikings"
     assert reloaded.display.brightness == 60
     assert json.loads(path.read_text())["version"] == CONFIG_VERSION
+
+
+def test_check_only_mode_builds_everything_and_exits(tmp_path, monkeypatch):
+    """The auto-updater's safety net: a commit that cannot start is refused."""
+    from scoreboard import app as app_module
+
+    monkeypatch.setenv("SCOREBOARD_CONFIG", str(tmp_path / "config.json"))
+    monkeypatch.setattr(app_module.paths, "VAR_DIR", str(tmp_path / "var"))
+    for attribute in ("LOGO_CACHE_DIR", "TEAM_CACHE_DIR", "STANDINGS_CACHE_DIR",
+                      "HTTP_CACHE_DIR", "FONT_CACHE_DIR"):
+        monkeypatch.setattr(app_module.paths, attribute,
+                            str(tmp_path / "var" / attribute.lower()))
+    monkeypatch.setattr(app_module.paths, "CONFIG_DIR", str(tmp_path))
+
+    assert app_module.main(["--check-only", "--no-web",
+                            "--config", str(tmp_path / "config.json")]) == 0
+
+
+def test_check_only_reports_failure_rather_than_raising(tmp_path, monkeypatch):
+    from scoreboard import app as app_module
+
+    def explode(*args, **kwargs):
+        raise RuntimeError("a layout blew up")
+
+    monkeypatch.setattr(app_module, "DisplayRunner", explode)
+    monkeypatch.setattr(app_module.paths, "CONFIG_DIR", str(tmp_path))
+    assert app_module.main(["--check-only", "--no-web",
+                            "--config", str(tmp_path / "config.json")]) == 1

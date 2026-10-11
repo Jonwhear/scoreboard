@@ -11,8 +11,11 @@
 [Unit]
 Description=Sports scoreboard on HUB75 LED matrix
 Documentation=file://__INSTALL_DIR__/README.md
-After=network-online.target time-sync.target
+After=network-online.target time-sync.target sports-scoreboard-update.service
 Wants=network-online.target
+# Pull updates first when the updater is installed. Wants= rather than
+# Requires=, so a failed or absent update never stops the panels.
+Wants=sports-scoreboard-update.service
 
 # Give up (leaving a clear failed state) after 5 restarts in 5 minutes, so a
 # broken install does not spin forever. These belong in [Unit], not [Service].

@@ -8,7 +8,8 @@
 # asking for confirmation.
 #
 #   ./scripts/install.sh              inspect, create venv, install deps
-#   ./scripts/install.sh --service    also install and enable the systemd unit
+#   ./scripts/install.sh --service      also install and enable the systemd unit
+#   ./scripts/install.sh --auto-update  ... and update from git on every boot
 #   ./scripts/install.sh --service --yes   ... without the confirmation prompt
 #
 set -euo pipefail
@@ -18,14 +19,19 @@ VENV="$PROJECT_DIR/.venv"
 SERVICE_NAME="sports-scoreboard"
 SERVICE_SRC="$PROJECT_DIR/systemd/$SERVICE_NAME.service"
 SERVICE_DST="/etc/systemd/system/$SERVICE_NAME.service"
+UPDATE_NAME="sports-scoreboard-update"
+UPDATE_SRC="$PROJECT_DIR/systemd/$UPDATE_NAME.service"
+UPDATE_DST="/etc/systemd/system/$UPDATE_NAME.service"
 
 INSTALL_SERVICE=0
+INSTALL_AUTO_UPDATE=0
 ASSUME_YES=0
 for arg in "$@"; do
   case "$arg" in
     --service) INSTALL_SERVICE=1 ;;
+    --auto-update) INSTALL_SERVICE=1; INSTALL_AUTO_UPDATE=1 ;;
     --yes|-y)  ASSUME_YES=1 ;;
-    --help|-h) sed -n '2,14p' "${BASH_SOURCE[0]}" | sed 's/^# \?//'; exit 0 ;;
+    --help|-h) sed -n '2,16p' "${BASH_SOURCE[0]}" | sed 's/^# \?//'; exit 0 ;;
     *) echo "Unknown option: $arg" >&2; exit 2 ;;
   esac
 done
@@ -194,6 +200,12 @@ if [ "$INSTALL_SERVICE" -eq 1 ]; then
   echo "       (starts as root, drops privileges to '$RUN_USER' after the matrix inits)"
   echo "    2. run: systemctl daemon-reload"
   echo "    3. run: systemctl enable --now $SERVICE_NAME"
+  if [ "$INSTALL_AUTO_UPDATE" -eq 1 ]; then
+    echo "    4. write $UPDATE_DST"
+    echo "       (on every boot: git pull, verify the new commit starts, and"
+    echo "        roll back automatically if it does not)"
+    echo "    5. run: systemctl enable $UPDATE_NAME"
+  fi
   echo "  Nothing else on the system is modified."
   if [ "$RUN_USER" = "root" ]; then
     warn "The service user resolved to 'root', so privileges will NOT be dropped."
@@ -222,6 +234,19 @@ if [ "$INSTALL_SERVICE" -eq 1 ]; then
     exit 1
   fi
   ok "Service installed, enabled at boot, and started"
+
+  if [ "$INSTALL_AUTO_UPDATE" -eq 1 ]; then
+    sed -e "s|__INSTALL_DIR__|$PROJECT_DIR|g" -e "s|__RUN_USER__|$RUN_USER|g" \
+        "$UPDATE_SRC" > "$UPDATE_DST"
+    chmod 644 "$UPDATE_DST"
+    systemctl daemon-reload
+    if systemctl enable "$UPDATE_NAME" >/dev/null 2>&1; then
+      ok "Auto-update enabled: each boot pulls $(git -C "$PROJECT_DIR" rev-parse --abbrev-ref HEAD 2>/dev/null || echo 'the current branch')"
+      echo "       Disable later with: sudo systemctl disable $UPDATE_NAME"
+    else
+      fail "Could not enable $UPDATE_NAME. Check: journalctl -u $UPDATE_NAME"
+    fi
+  fi
   systemctl --no-pager --lines=0 status "$SERVICE_NAME" || true
 fi
 
@@ -242,4 +267,7 @@ cat <<EOF
 
   Install the service so it starts at boot:
       sudo $0 --service
+
+  ...and have it update itself from git on every boot:
+      sudo $0 --auto-update
 EOF
