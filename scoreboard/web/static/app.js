@@ -17,6 +17,7 @@ const state = {
   previewTimer: null,
   suppress: false,     // true while we are writing values into the controls
   lastTeamQuery: '',
+  lockedGame: '',
 };
 
 /* -- helpers ----------------------------------------------------------- */
@@ -186,7 +187,145 @@ function bindControls() {
 
   el('team-league').addEventListener('change', () => searchTeams());
   el('team-search').addEventListener('input', debounce(() => searchTeams(), 220));
+
+  el('show-standings').addEventListener('change', (event) => {
+    el('standings-options').hidden = !event.target.checked;
+    updateConfig({ rotation: { show_standings: event.target.checked } });
+    if (event.target.checked) loadStandingsLeagues();
+  });
+  const standingsSeconds = el('standings-seconds');
+  standingsSeconds.addEventListener('input', () => {
+    el('standings-seconds-out').textContent = standingsSeconds.value;
+    updateConfig({ rotation: { standings_seconds: Number(standingsSeconds.value) } });
+  });
+
+  el('game-search').addEventListener('input', debounce(() => renderGames(), 200));
+  el('unlock').addEventListener('click', () => setLock(''));
 }
+
+/* -- follow one game --------------------------------------------------- */
+
+let knownGames = [];
+
+async function loadGames() {
+  try {
+    const payload = await api('/api/games');
+    knownGames = payload.games || [];
+    state.lockedGame = payload.locked_game || '';
+  } catch (error) {
+    knownGames = [];
+  }
+  renderGames();
+}
+
+function gameWhen(game) {
+  if (game.state === 'in') return game.status_short || 'live';
+  if (game.state === 'post') return game.status_short || 'final';
+  const start = new Date(game.start_time);
+  return start.toLocaleString([], {
+    weekday: 'short', hour: 'numeric', minute: '2-digit',
+  });
+}
+
+function renderGames() {
+  const list = el('game-list');
+  const needle = el('game-search').value.trim().toLowerCase();
+  const locked = state.lockedGame || '';
+
+  el('lock-state').textContent = locked ? 'locked to one game' : 'not locked';
+  el('lock-state').classList.toggle('on', Boolean(locked));
+  el('unlock').hidden = !locked;
+
+  const matches = knownGames.filter((game) => {
+    if (!needle) return true;
+    return [game.league, game.home.abbreviation, game.away.abbreviation,
+            game.home.display_name, game.away.display_name]
+      .join(' ').toLowerCase().includes(needle);
+  }).slice(0, 40);
+
+  list.innerHTML = '';
+  if (!matches.length) {
+    list.append(emptyRow(knownGames.length
+      ? 'No games matched.'
+      : 'No games loaded yet - check the Status panel.'));
+    return;
+  }
+
+  for (const game of matches) {
+    const row = document.createElement('li');
+    row.className = 'game' + (game.locked ? ' locked' : '');
+
+    const league = document.createElement('span');
+    league.className = 'league';
+    league.textContent = game.league;
+
+    const matchup = document.createElement('span');
+    matchup.className = 'matchup';
+    const score = game.state === 'pre' ? ''
+      : `  ${game.away.score ?? '-'}-${game.home.score ?? '-'}`;
+    matchup.textContent = `${game.away.abbreviation} @ ${game.home.abbreviation}${score}`;
+
+    const when = document.createElement('span');
+    when.className = 'when';
+    when.textContent = gameWhen(game);
+
+    const action = document.createElement('button');
+    action.className = 'add state';
+    action.type = 'button';
+    action.textContent = game.locked ? 'Locked' : 'Lock';
+    action.disabled = Boolean(game.locked);
+    action.addEventListener('click', () => setLock(game.key));
+
+    row.append(league, matchup, when, action);
+    list.append(row);
+  }
+}
+
+async function setLock(key) {
+  try {
+    const result = await api('/api/lock', {
+      method: 'POST', body: JSON.stringify({ game: key }),
+    });
+    state.lockedGame = result.locked_game || '';
+    toast(key ? 'Locked to that game' : 'Lock released');
+    await loadGames();
+    setTimeout(refreshPreview, 400);
+  } catch (error) {
+    toast(error.message, true);
+  }
+}
+
+/* -- standings --------------------------------------------------------- */
+
+async function loadStandingsLeagues() {
+  const container = el('standings-leagues');
+  if (!container || !state.config) return;
+  let leagues = [];
+  try {
+    leagues = (await api('/api/leagues')).leagues.filter((league) => league.enabled);
+  } catch (error) {
+    return;
+  }
+  const chosen = new Set(state.config.rotation.standings_leagues || []);
+  container.innerHTML = '';
+  for (const league of leagues) {
+    const label = document.createElement('label');
+    const input = document.createElement('input');
+    input.type = 'checkbox';
+    input.checked = chosen.has(league.id);
+    input.dataset.league = league.id;
+    input.addEventListener('change', () => {
+      const picked = [...container.querySelectorAll('input')]
+        .filter((box) => box.checked).map((box) => box.dataset.league);
+      updateConfig({ rotation: { standings_leagues: picked } });
+    });
+    const text = document.createElement('span');
+    text.textContent = league.short_name;
+    label.append(input, text);
+    container.append(label);
+  }
+}
+
 
 function applyConfig(config) {
   state.suppress = true;
@@ -205,6 +344,11 @@ function applyConfig(config) {
     el('sleep-times').hidden = !config.sleep.enabled;
     el('sleep-start').value = config.sleep.start;
     el('sleep-end').value = config.sleep.end;
+    el('show-standings').checked = config.rotation.show_standings;
+    el('standings-options').hidden = !config.rotation.show_standings;
+    el('standings-seconds').value = config.rotation.standings_seconds;
+    el('standings-seconds-out').textContent = config.rotation.standings_seconds;
+    state.lockedGame = config.rotation.locked_game || '';
   } finally {
     state.suppress = false;
   }
@@ -432,6 +576,9 @@ async function refreshStatus() {
     ? (status.stale ? coloured('stale — using cached data', 'warn') : coloured('ok', 'good'))
     : coloured('offline — using cached data', 'bad'));
   statusRow(grid, 'Last update', relativeTime(status.last_success));
+  if (status.locked_game) {
+    statusRow(grid, 'Locked to', coloured(status.locked_game, 'warn'));
+  }
   statusRow(grid, 'Showing', screen.total
     ? `${screen.title} (${screen.index}/${screen.total}, ${screen.layout})`
     : (screen.title || '—'));
@@ -494,6 +641,7 @@ async function refreshConfig() {
 function startPolling() {
   const visible = () => document.visibilityState === 'visible';
   state.statusTimer = setInterval(() => { if (visible()) refreshStatus(); }, STATUS_INTERVAL);
+  setInterval(() => { if (visible()) loadGames(); }, 20000);
   state.previewTimer = setInterval(() => { if (visible()) refreshPreview(); }, PREVIEW_INTERVAL);
   document.addEventListener('visibilitychange', () => {
     if (visible()) { refreshStatus(); refreshPreview(); }
@@ -507,6 +655,10 @@ async function init() {
     await loadLeagues();
     await loadFavorites();
     await searchTeams();
+    await loadGames();
+    if (state.config && state.config.rotation.show_standings) {
+      await loadStandingsLeagues();
+    }
   } catch (error) {
     toast(`Could not load configuration: ${error.message}`, true);
   }

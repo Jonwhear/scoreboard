@@ -44,6 +44,26 @@
     </div>
   </section>
 
+  <!-- FOLLOW ONE GAME ---------------------------------------------------->
+  <section class="card">
+    <div class="card-head">
+      <h2>Follow one game</h2>
+      <span class="hint" id="lock-state">not locked</span>
+    </div>
+    <p class="note">Pin the display to a single game. Nothing else is shown
+      until you unlock, and the lock releases itself once the game has been
+      final for a while.</p>
+    <div class="field-row">
+      <label class="field grow">
+        <span>Search games</span>
+        <input id="game-search" type="search" placeholder="Team, or leave blank for all…"
+               autocomplete="off">
+      </label>
+      <button class="btn" id="unlock" type="button" hidden>Unlock</button>
+    </div>
+    <ul id="game-list" class="team-results"></ul>
+  </section>
+
   <!-- STATUS ----------------------------------------------------------->
   <section class="card">
     <div class="card-head"><h2>Status</h2></div>
@@ -110,6 +130,24 @@
       <label class="switch"><input type="checkbox" id="show-nonfav"><span>Show other live games</span></label>
       <label class="switch"><input type="checkbox" id="show-upcoming"><span>Show upcoming games</span></label>
       <label class="switch"><input type="checkbox" id="show-finals"><span>Show recent finals</span></label>
+    </div>
+
+    <div class="subsection">
+      <label class="switch">
+        <input type="checkbox" id="show-standings"><span>Show league tables</span>
+      </label>
+      <div id="standings-options" hidden>
+        <p class="note">A table scrolls vertically while it is on screen.
+          Soccer tables mark European places and relegation down the left edge.</p>
+        <label class="field">
+          <span>Seconds per table <output id="standings-seconds-out"></output></span>
+          <input id="standings-seconds" type="range" min="5" max="60" step="1">
+        </label>
+        <span class="hint">Leagues</span>
+        <div id="standings-leagues" class="toggle-grid"></div>
+        <p class="note">With none ticked, every enabled league that publishes a
+          table is shown.</p>
+      </div>
     </div>
 
     <div class="subsection">

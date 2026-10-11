@@ -61,6 +61,8 @@ def status():
     )
     if svc.logos is not None:
         payload["logos"] = svc.logos.stats()
+    payload["locked_game"] = config.rotation.locked_game
+    payload["standings_enabled"] = config.rotation.show_standings
     if svc.fonts is not None:
         payload["fonts"] = svc.fonts.describe()
     return jsonify(payload)
@@ -68,9 +70,51 @@ def status():
 
 @bp.get("/games")
 def games():
+    """Every known game, with the locked one flagged for the picker."""
     svc = services()
-    return jsonify({"games": [game.to_dict() for game in sorted(
-        svc.state.games(), key=lambda game: (game.league, game.start_time, game.game_id))]})
+    locked = svc.config_store.config.rotation.locked_game
+    ordered = sorted(svc.state.games(),
+                     key=lambda game: (game.league, game.start_time, game.game_id))
+    return jsonify({
+        "locked_game": locked,
+        "games": [dict(game.to_dict(), locked=game.key == locked) for game in ordered],
+    })
+
+
+@bp.post("/lock")
+def set_lock():
+    """Pin the display to one game, or clear the pin with an empty key."""
+    payload = request.get_json(silent=True) or {}
+    key = str(payload.get("game", "") or "").strip()
+    svc = services()
+    if key and not any(game.key == key for game in svc.state.games()):
+        return _bad_request(f"no game with key {key!r} is currently known")
+    svc.config_store.update({"rotation": {"locked_game": key}})
+    if svc.runner is not None:
+        svc.runner.force_next()
+    log.info("Game lock %s", f"set to {key}" if key else "cleared")
+    return jsonify({"ok": True, "locked_game": key})
+
+
+@bp.get("/standings")
+def standings():
+    """Tables currently cached, for the web UI's league picker."""
+    svc = services()
+    if svc.standings is None:
+        return jsonify({"standings": [], "available": False})
+    config = svc.config_store.config
+    wanted = config.rotation.standings_leagues or config.sports.enabled_leagues
+    tables = []
+    for league in wanted:
+        table = svc.standings.get(league)
+        if table is not None:
+            tables.append(table.to_dict())
+    return jsonify({
+        "available": True,
+        "enabled": config.rotation.show_standings,
+        "leagues": list(wanted),
+        "standings": tables,
+    })
 
 
 # -- configuration ---------------------------------------------------------

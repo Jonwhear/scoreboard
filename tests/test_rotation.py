@@ -8,7 +8,7 @@ import pytest
 
 from scoreboard.config import Config
 from scoreboard.rotation import (Layout, Rotator, ScreenItem, ScreenKind,
-                                 build_playlist)
+                                 build_playlist, find_locked_game)
 from scoreboard.samples import (sample_card_games, sample_final_games,
                                 sample_live_game, sample_upcoming_games)
 
@@ -232,3 +232,84 @@ def test_featured_mode_still_features_favourites(now):
                            layout_mode="featured"), now)
     assert playlist[0].kind is ScreenKind.FAVORITE_LIVE
     assert playlist[0].layout is Layout.FEATURED
+
+
+def test_a_screen_with_its_own_duration_is_honoured_by_the_rotator():
+    """A league table needs longer than a score; the rotator must respect it."""
+    table = ScreenItem(ScreenKind.STANDINGS, Layout.STANDINGS, [], title="EPL",
+                       duration=20.0)
+    quick = screens(1)[0]
+    rotator = Rotator(screen_seconds=5)
+    rotator.set_playlist([table, quick])
+
+    assert rotator.tick(0.0) is table
+    assert rotator.tick(10.0) is table, "must not advance at the default 5s"
+    assert rotator.tick(19.0) is table
+    assert rotator.tick(20.0) is quick, "advances at its own duration"
+    # The next screen falls back to the configured default.
+    assert rotator.tick(24.0) is quick
+    assert rotator.tick(25.0) is table
+
+
+def test_current_duration_falls_back_to_the_configured_default():
+    rotator = Rotator(screen_seconds=7)
+    rotator.set_playlist(screens(2))
+    rotator.tick(0.0)
+    assert rotator.current_duration() == 7.0
+
+
+# -- locking ---------------------------------------------------------------
+
+def test_a_locked_game_is_the_only_thing_shown(slate, now):
+    target = slate[0]
+    playlist = build_playlist(slate, make_config(locked_game=target.key), now)
+    assert len(playlist) == 1
+    assert playlist[0].kind is ScreenKind.LOCKED
+    assert playlist[0].layout is Layout.FEATURED
+    assert playlist[0].games == [target]
+
+
+def test_a_lock_ignores_whether_its_league_is_enabled(slate, now):
+    """You asked for that game, not for its league."""
+    target = next(game for game in slate if game.league == "nhl")
+    config = make_config(leagues=["nfl"], locked_game=target.key)
+    playlist = build_playlist(slate, config, now)
+    assert playlist[0].games == [target]
+
+
+def test_a_lock_on_a_game_that_vanished_falls_back(slate, now):
+    playlist = build_playlist(slate, make_config(locked_game="nfl:gone"), now)
+    assert all(screen.kind is not ScreenKind.LOCKED for screen in playlist)
+    assert len(playlist) > 1
+
+
+def test_a_lock_releases_itself_once_the_game_is_long_final(now):
+    game = sample_final_games(now)[0]
+    game.last_updated = now - timedelta(minutes=45)
+    rotation = make_config(locked_game=game.key, lock_release_minutes=30).rotation
+    assert find_locked_game([game], rotation, now) is None
+
+
+def test_a_lock_holds_while_the_final_is_fresh(now):
+    game = sample_final_games(now)[0]
+    game.last_updated = now - timedelta(minutes=5)
+    rotation = make_config(locked_game=game.key, lock_release_minutes=30).rotation
+    assert find_locked_game([game], rotation, now) is game
+
+
+def test_a_lock_on_a_live_game_never_auto_releases(now):
+    game = sample_live_game(now)
+    game.last_updated = now - timedelta(hours=6)
+    rotation = make_config(locked_game=game.key, lock_release_minutes=30).rotation
+    assert find_locked_game([game], rotation, now) is game
+
+
+def test_zero_release_minutes_keeps_the_lock_forever(now):
+    game = sample_final_games(now)[0]
+    game.last_updated = now - timedelta(days=3)
+    rotation = make_config(locked_game=game.key, lock_release_minutes=0).rotation
+    assert find_locked_game([game], rotation, now) is game
+
+
+def test_no_lock_configured_means_no_lock(slate, now):
+    assert find_locked_game(slate, make_config().rotation, now) is None

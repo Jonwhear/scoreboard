@@ -285,3 +285,86 @@ def test_cached_data_is_summarised_as_such(client, services):
         "nfl", games=[], stale=True, error="cached response (upstream unavailable)"))
     league = client.get("/api/status").get_json()["leagues"][0]
     assert league["error_short"] == "using cached data"
+
+
+# -- follow one game -------------------------------------------------------
+
+def test_games_endpoint_flags_the_locked_one(client, services, nfl_games):
+    from scoreboard.models import LeagueSnapshot
+
+    services.state.update_snapshot(LeagueSnapshot("nfl", games=nfl_games))
+    target = nfl_games[0].key
+
+    assert client.post("/api/lock", json={"game": target}).status_code == 200
+    payload = client.get("/api/games").get_json()
+    assert payload["locked_game"] == target
+    assert [game["key"] for game in payload["games"] if game["locked"]] == [target]
+    assert services.config_store.config.rotation.locked_game == target
+
+
+def test_locking_advances_the_display(client, services, nfl_games):
+    from scoreboard.models import LeagueSnapshot
+
+    services.state.update_snapshot(LeagueSnapshot("nfl", games=nfl_games))
+    before = services.runner.advanced
+    client.post("/api/lock", json={"game": nfl_games[0].key})
+    assert services.runner.advanced == before + 1, "should jump to it, not wait"
+
+
+def test_the_lock_is_cleared_with_an_empty_key(client, services, nfl_games):
+    from scoreboard.models import LeagueSnapshot
+
+    services.state.update_snapshot(LeagueSnapshot("nfl", games=nfl_games))
+    client.post("/api/lock", json={"game": nfl_games[0].key})
+    assert client.post("/api/lock", json={"game": ""}).get_json()["locked_game"] == ""
+    assert services.config_store.config.rotation.locked_game == ""
+
+
+def test_locking_an_unknown_game_is_rejected(client, services):
+    response = client.post("/api/lock", json={"game": "nfl:not-a-real-game"})
+    assert response.status_code == 400
+    assert services.config_store.config.rotation.locked_game == ""
+
+
+def test_status_reports_the_lock(client, services, nfl_games):
+    from scoreboard.models import LeagueSnapshot
+
+    services.state.update_snapshot(LeagueSnapshot("nfl", games=nfl_games))
+    client.post("/api/lock", json={"game": nfl_games[0].key})
+    assert client.get("/api/status").get_json()["locked_game"] == nfl_games[0].key
+
+
+# -- standings -------------------------------------------------------------
+
+def test_standings_endpoint_without_a_cache(client, services):
+    services.standings = None
+    payload = client.get("/api/standings").get_json()
+    assert payload["available"] is False
+
+
+def test_standings_endpoint_returns_cached_tables(client, services):
+    from scoreboard.models import Standings, StandingsGroup, StandingsRow
+
+    class StubCache:
+        def get(self, league):
+            if league != "nfl":
+                return None
+            return Standings(league="nfl", groups=[StandingsGroup(
+                "nfl", "AFC", [StandingsRow("nfl", "2", "BUF", "Buffalo Bills",
+                                            rank=1, wins=5, losses=1)])])
+
+    services.standings = StubCache()
+    client.post("/api/config", json={"rotation": {"show_standings": True}})
+    payload = client.get("/api/standings").get_json()
+    assert payload["available"] is True and payload["enabled"] is True
+    assert payload["standings"][0]["groups"][0]["rows"][0]["abbreviation"] == "BUF"
+
+
+def test_standings_settings_are_configurable(client, services):
+    client.post("/api/config", json={"rotation": {
+        "show_standings": True, "standings_seconds": 35,
+        "standings_leagues": ["epl", "nfl"]}})
+    rotation = services.config_store.config.rotation
+    assert rotation.show_standings is True
+    assert rotation.standings_seconds == 35
+    assert rotation.standings_leagues == ["epl", "nfl"]
