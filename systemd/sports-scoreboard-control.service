@@ -1,0 +1,19 @@
+# Carry out an update or reboot request from the web UI.
+#
+# Started only by sports-scoreboard-control.path. See scripts/control.sh
+# for exactly what each request does.
+
+[Unit]
+Description=Carry out an update/reboot request from the scoreboard web UI
+Documentation=file://__INSTALL_DIR__/README.md
+
+[Service]
+Type=oneshot
+User=root
+Environment=SCOREBOARD_USER=__RUN_USER__
+ExecStart=__INSTALL_DIR__/scripts/control.sh
+# A dependency install on a Pi is slow; bounded so a hang cannot wedge it.
+TimeoutStartSec=900
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=sports-scoreboard-control

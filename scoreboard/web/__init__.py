@@ -29,6 +29,7 @@ class Services:
     logos: Optional[object] = None
     fonts: Optional[object] = None
     standings: Optional[object] = None
+    system: Optional[object] = None
     version: str = "0"
 
 

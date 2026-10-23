@@ -71,6 +71,24 @@
     <dl class="status-grid" id="status-grid"></dl>
   </section>
 
+  <!-- SOFTWARE ------------------------------------------------------->
+  <section class="card" id="software-card">
+    <div class="card-head">
+      <h2>Software</h2>
+      <span class="hint" id="software-state"></span>
+    </div>
+    <dl class="status-grid" id="software-grid"></dl>
+    <div class="button-row">
+      <button class="btn" id="check-updates" type="button">Check for updates</button>
+      <button class="btn" id="update-reboot" type="button">Update &amp; reboot</button>
+      <button class="btn ghost" id="reboot" type="button">Reboot</button>
+    </div>
+    <p class="note" id="controls-missing" hidden>The Update and Reboot buttons need a
+      small helper that runs as root. Install it once, on the Pi:
+      <code>cd ~/scoreboard &amp;&amp; git pull &amp;&amp; sudo ./scripts/install.sh --auto-update</code></p>
+    <pre class="log" id="software-log" hidden></pre>
+  </section>
+
   <!-- FAVOURITES ------------------------------------------------------->
   <section class="card">
     <div class="card-head">

@@ -287,6 +287,48 @@ def remove_favorite(league: str, team_id: str):
     return jsonify({"ok": True})
 
 
+# -- software updates --------------------------------------------------------
+
+@bp.get("/system")
+def system_info():
+    """Installed version, whether the buttons can work, and recent activity."""
+    svc = services()
+    if svc.system is None:
+        return jsonify({"available": False})
+    return jsonify(dict(svc.system.describe(), available=True))
+
+
+@bp.post("/system/check")
+def system_check():
+    """Fetch from GitHub and say how far behind the Pi is."""
+    svc = services()
+    if svc.system is None:
+        return _bad_request("updates are not available here", 503)
+    return jsonify(svc.system.check())
+
+
+@bp.post("/system/<action>")
+def system_action(action: str):
+    """Update and/or reboot, carried out by the root helper."""
+    from ..system import ACTIONS
+
+    svc = services()
+    if svc.system is None:
+        return _bad_request("updates are not available here", 503)
+    if action not in ACTIONS:
+        return _bad_request(f"unknown action {action!r}", 404)
+    if not svc.system.controls_installed():
+        return _bad_request(
+            "the update and reboot helper is not installed yet; run once on the Pi: "
+            "sudo ./scripts/install.sh --auto-update", 409)
+    try:
+        svc.system.request(action)
+    except OSError as exc:
+        log.error("Could not write the %s request: %s", action, exc)
+        return _bad_request(f"could not write the request: {exc}", 500)
+    return jsonify({"ok": True, "action": action})
+
+
 # -- preview and actions ---------------------------------------------------
 
 @bp.get("/preview.png")

@@ -39,6 +39,7 @@ from .scheduler import DataScheduler
 from .state import AppState
 from .schedules import ScheduleCache
 from .standings import StandingsCache
+from .system import SystemControl
 from .teams import TeamCatalog
 
 log = logging.getLogger("scoreboard")
@@ -198,6 +199,7 @@ def check_only(args: argparse.Namespace) -> int:
             create_app(Services(config_store=store, state=state, runner=runner,
                                 scheduler=scheduler, teams=catalog, logos=logos,
                                 fonts=fonts, standings=standings,
+                                system=SystemControl(paths.PROJECT_ROOT, paths.CONTROL_DIR),
                                 version=__version__))
     finally:
         http.close()
@@ -308,6 +310,7 @@ def start_web(config, args, store, state, runner, scheduler, catalog, logos,
         config_store=store, state=state, runner=runner, scheduler=scheduler,
         teams=catalog, logos=logos, fonts=fonts, version=__version__,
         standings=standings,
+        system=SystemControl(paths.PROJECT_ROOT, paths.CONTROL_DIR),
     )
     app = create_app(services)
     host = args.host or config.web.host

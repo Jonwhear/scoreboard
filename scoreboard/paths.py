@@ -21,6 +21,8 @@ TEAM_CACHE_DIR = os.path.join(VAR_DIR, "teams")
 STANDINGS_CACHE_DIR = os.path.join(VAR_DIR, "standings")
 HTTP_CACHE_DIR = os.path.join(VAR_DIR, "http")
 FONT_CACHE_DIR = os.path.join(VAR_DIR, "fonts")
+#: Where the web UI leaves update/reboot requests for scripts/control.sh.
+CONTROL_DIR = os.path.join(VAR_DIR, "control")
 
 #: Drop extra .bdf files here to have them picked up automatically.
 BUNDLED_FONT_DIR = os.path.join(PACKAGE_DIR, "assets", "fonts")
@@ -34,5 +36,5 @@ def config_path() -> str:
 def ensure_directories() -> None:
     """Create the writable directories the app needs."""
     for directory in (CONFIG_DIR, VAR_DIR, LOGO_CACHE_DIR, TEAM_CACHE_DIR,
-                      STANDINGS_CACHE_DIR, HTTP_CACHE_DIR, FONT_CACHE_DIR):
+                      STANDINGS_CACHE_DIR, HTTP_CACHE_DIR, FONT_CACHE_DIR, CONTROL_DIR):
         os.makedirs(directory, exist_ok=True)

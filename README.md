@@ -50,6 +50,7 @@ status gets a column of its own:
 - [Upgrades keep your settings](#upgrades-keep-your-settings)
 - [systemd service](#systemd-service)
 - [Updating itself on every boot](#updating-itself-on-every-boot)
+- [Updating from the web UI](#updating-from-the-web-ui)
 - [Logs](#logs)
 - [Tests](#tests)
 - [Architecture](#architecture)
@@ -216,6 +217,9 @@ the installation is owned by root; fix it with
 `sudo chown -R $USER ~/sports-scoreboard` and restart the service.
 
 ### Updating later
+
+From the web UI: **Software → Update & reboot**. See
+[Updating from the web UI](#updating-from-the-web-ui). By hand:
 
 ```bash
 cd ~/sports-scoreboard
@@ -627,7 +631,9 @@ a `oneshot` unit ordered `Before=sports-scoreboard.service`. On every boot,
 before the panels light up, `scripts/auto-update.sh`:
 
 1. records the commit that is running now,
-2. `git fetch`es and fast-forwards the current branch,
+2. `git fetch`es and fast-forwards the current branch — retrying for up to 90
+   seconds first, because a Pi's Wi-Fi often comes up *after* systemd says the
+   network is online,
 3. reinstalls dependencies **only** if `requirements.txt` changed,
 4. runs `python -m scoreboard.app --check-only` with a 90 second timeout —
    which loads the config, resolves the fonts, builds the provider, the
@@ -651,8 +657,8 @@ What it deliberately will **not** do:
 
 | Situation | What happens |
 | --- | --- |
-| No network | Logged as a no-op; boots on the current commit |
-| Local edits on the Pi | Left completely alone; no update attempted |
+| No network after 90 s | Logged as a no-op, with git's own error; boots on the current commit |
+| Local edits on the Pi | Left completely alone; no update attempted (the journal lists the files). A permission-only change such as `chmod +x` does not count as an edit |
 | Detached HEAD | Refuses to update |
 | Already up to date | Silent no-op |
 | New commit does not start | Rolled back, recorded, never retried |
@@ -664,6 +670,50 @@ never stop the scoreboard from starting.
 
 **It only ever fast-forwards the branch the Pi is already on.** It will not
 switch branches, merge, or rebase.
+
+---
+
+## Updating from the web UI
+
+The **Software** card shows the commit the Pi is running, whether it updates
+on boot, and three buttons:
+
+| Button | What it does |
+| --- | --- |
+| **Check for updates** | `git fetch`, then lists the commits the Pi does not have yet. Installs nothing. |
+| **Update & reboot** | Pulls the latest code, verifies it starts (rolling back if not, exactly as at boot), refreshes any installed systemd units that changed, then reboots. |
+| **Reboot** | Reboots the Pi. |
+
+The page reconnects on its own once the Pi is back, and the log under the
+buttons shows what happened, so a failed update is visible without a screen.
+
+The web UI runs unprivileged and cannot reboot anything itself. It writes one
+word (`update`, `update-reboot` or `reboot`) to `var/control/request`;
+`sports-scoreboard-control.path` sees the file and runs
+`scripts/control.sh` as root, which understands those three words and
+nothing else. It is installed by `install.sh --service` (and therefore by
+`--auto-update`):
+
+```bash
+cd ~/scoreboard && git pull && sudo ./scripts/install.sh --auto-update
+```
+
+Until it is installed the buttons are greyed out and the card says what to
+run. A web-UI update differs from the boot update in two ways, both because
+you asked for it explicitly: it retries a commit that failed before, and if
+there are local edits it sets them aside with `git stash` (get them back
+with `git stash pop`) instead of giving up. It also hands `.git` back to the
+service account if something ran git as root, which would otherwise block
+every later update.
+
+Anyone who can open the web UI can press these buttons — it is LAN-only and
+unauthenticated by design, like every other setting on the page. An update
+can only ever install what is on the branch the Pi follows on GitHub.
+
+```bash
+journalctl -u sports-scoreboard-control      # what the buttons did
+cat var/control/history.log                  # the same, as the web UI shows it
+```
 
 ---
 
@@ -1081,7 +1131,8 @@ into negative here.
 | A table appears for a moment, then the previous one comes back | Fixed: every table used to share one screen key, so the rotation snapped back to the first table every two seconds |
 | No schedule screen for a favourite | Its league is switched off, it has no games left this season, or the schedule has not been fetched yet (it arrives within seconds when online). **Sample schedule** shows the layout regardless |
 | An NHL/soccer crest looks like a black blob | Fixed automatically — very dark logos are brightened until they read on an unlit panel, preserving hue. If one still looks wrong it is the source artwork; turn `show_logos` off for a text-only screen |
-| Boot update did nothing | `journalctl -u sports-scoreboard-update -b` says which no-op applied (offline, local edits, already current, or a blocked commit) |
+| Boot update did nothing | `journalctl -u sports-scoreboard-update -b` says which no-op applied (offline, local edits, already current, or a blocked commit). If that unit does not exist, boot updates were never installed: run `sudo ./scripts/install.sh --auto-update` once. **Software → Update & reboot** in the web UI forces one |
+| Update & reboot is greyed out | The root helper is not installed; the card shows the one command to run |
 
 ---
 
@@ -1138,6 +1189,7 @@ sports-scoreboard/
 │   ├── privileges.py            drop root after the matrix is up
 │   ├── paths.py                 where files live
 │   ├── samples.py               synthetic games for tests and the UI
+│   ├── system.py                version, update check, update/reboot requests
 │   ├── providers/
 │   │   ├── base.py              the SportsProvider interface
 │   │   └── espn.py              the only ESPN-aware module
@@ -1145,13 +1197,14 @@ sports-scoreboard/
 │   │   ├── base.py              Display interface
 │   │   ├── matrix.py            rgbmatrix backend
 │   │   ├── preview.py           image backend (browser preview, dev)
-│   │   ├── layouts.py           layouts A–F, any chain length
+│   │   ├── layouts.py           layouts A–G, any chain length
 │   │   └── fonts.py             BDF → TTF → built-in font resolution
 │   ├── assets/fonts/            drop extra .bdf files here
 │   └── web/                     Flask app, JSON API, HTML/CSS/JS
 ├── scripts/
 │   ├── install.sh               inspect, set up, optionally install the service
 │   ├── auto-update.sh           boot-time git update, verify, roll back
+│   ├── control.sh               runs the web UI's update/reboot requests as root
 │   ├── run-dev.sh               preview mode
 │   ├── test-matrix.sh           panel test pattern / demo / sample PNGs
 │   ├── service.sh               start/stop/restart/status/logs
@@ -1160,8 +1213,9 @@ sports-scoreboard/
 ├── systemd/
 │   ├── sports-scoreboard.service
 │   ├── sports-scoreboard-update.service   pull + verify before the display starts
+│   ├── sports-scoreboard-control.{path,service}   the web UI's Update/Reboot buttons
 │   └── sports-scoreboard-preview.service
-├── tests/                       ~300 offline tests + ESPN fixtures
+├── tests/                       ~390 offline tests + ESPN fixtures
 └── var/                         runtime caches (gitignored)
 ```
 

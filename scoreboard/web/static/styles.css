@@ -390,3 +390,23 @@ input[type="range"] {
 }
 
 #lock-state.on { color: var(--accent); font-weight: 600; }
+
+/* -- software card -------------------------------------------------------- */
+
+.log {
+  margin: 12px 0 0;
+  padding: 10px 12px;
+  max-height: 220px;
+  overflow: auto;
+  font-family: var(--mono);
+  font-size: 12px;
+  line-height: 1.45;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  color: var(--text-dim);
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+}
+.note code { font-family: var(--mono); font-size: 12px; overflow-wrap: anywhere; }
+.btn:disabled { opacity: 0.45; cursor: not-allowed; }

@@ -19,6 +19,10 @@
 # It never touches config/config.json or var/ -- those are gitignored, so
 # favourites and settings survive every update.
 #
+# SCOREBOARD_UPDATE_FORCE=1 is what the web UI's "Update" button sets: it
+# retries a commit that failed before, and sets aside local edits with
+# `git stash` (recoverable with `git stash pop`) instead of giving up.
+#
 set -uo pipefail
 
 PROJECT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
@@ -29,6 +33,12 @@ LAST_GOOD="$STATE_DIR/last-good-commit"
 BLOCKED="$STATE_DIR/blocked-commit"
 VENV_PY="$PROJECT_DIR/.venv/bin/python"
 STARTUP_TIMEOUT="${SCOREBOARD_UPDATE_TIMEOUT:-90}"
+# Wi-Fi often comes up after network-online.target on a Pi, so keep trying
+# for a while before deciding we are offline.
+NETWORK_WAIT="${SCOREBOARD_NETWORK_WAIT:-90}"
+FORCE="${SCOREBOARD_UPDATE_FORCE:-0}"
+# Permission-only differences (a `chmod +x` on the Pi) are not edits.
+GIT=(git -c core.fileMode=false)
 
 log() { printf '%s\n' "$*"; }
 
@@ -52,16 +62,33 @@ fi
 CURRENT="$(git rev-parse HEAD)"
 log "On $BRANCH at ${CURRENT:0:8}"
 
-# A dirty tree means someone edited on the Pi. Never clobber that.
-if ! git diff --quiet || ! git diff --cached --quiet; then
-  log "Working tree has local changes; leaving them alone."
-  exit 0
+# A dirty tree means someone edited on the Pi. Never clobber that -- unless
+# the update was asked for by hand, and then only set the edits aside.
+if ! "${GIT[@]}" diff --quiet || ! "${GIT[@]}" diff --cached --quiet; then
+  if [ "$FORCE" != "1" ]; then
+    log "Working tree has local changes; leaving them alone."
+    log "  (files: $("${GIT[@]}" diff --name-only HEAD | tr '\n' ' '))"
+    exit 0
+  fi
+  log "Setting local changes aside with git stash (recover with: git stash pop)."
+  if ! "${GIT[@]}" stash push --quiet -m "scoreboard update $(date '+%F %T')"; then
+    log "Could not stash local changes; leaving everything as it is."
+    exit 0
+  fi
 fi
 
-if ! timeout 60 git fetch --quiet origin "$BRANCH" 2>/dev/null; then
-  log "Could not reach the remote (offline?); continuing on the current commit."
-  exit 0
-fi
+DEADLINE=$(( $(date +%s) + NETWORK_WAIT ))
+while :; do
+  if FETCH_ERROR="$(timeout 60 git fetch --quiet origin "$BRANCH" 2>&1)"; then
+    break
+  fi
+  if [ "$(date +%s)" -ge "$DEADLINE" ]; then
+    log "Could not fetch from the remote; continuing on the current commit."
+    log "  git said: ${FETCH_ERROR:-no output (timed out?)}"
+    exit 0
+  fi
+  sleep 5
+done
 
 TARGET="$(git rev-parse "origin/$BRANCH" 2>/dev/null || echo "$CURRENT")"
 if [ "$TARGET" = "$CURRENT" ]; then
@@ -70,7 +97,7 @@ if [ "$TARGET" = "$CURRENT" ]; then
   exit 0
 fi
 
-if [ -f "$BLOCKED" ] && [ "$(cat "$BLOCKED")" = "$TARGET" ]; then
+if [ "$FORCE" != "1" ] && [ -f "$BLOCKED" ] && [ "$(cat "$BLOCKED")" = "$TARGET" ]; then
   log "Commit ${TARGET:0:8} already failed to start once; staying on ${CURRENT:0:8}."
   exit 0
 fi
@@ -78,8 +105,9 @@ fi
 log "Updating ${CURRENT:0:8} -> ${TARGET:0:8}"
 echo "$CURRENT" > "$LAST_GOOD"
 
-if ! git merge --ff-only --quiet "$TARGET" 2>/dev/null; then
+if ! MERGE_ERROR="$("${GIT[@]}" merge --ff-only --quiet "$TARGET" 2>&1)"; then
   log "Cannot fast-forward (branch rewritten?); staying put."
+  log "  git said: $MERGE_ERROR"
   exit 0
 fi
 

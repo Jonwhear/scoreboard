@@ -22,6 +22,7 @@ SERVICE_DST="/etc/systemd/system/$SERVICE_NAME.service"
 UPDATE_NAME="sports-scoreboard-update"
 UPDATE_SRC="$PROJECT_DIR/systemd/$UPDATE_NAME.service"
 UPDATE_DST="/etc/systemd/system/$UPDATE_NAME.service"
+CONTROL_NAME="sports-scoreboard-control"
 
 INSTALL_SERVICE=0
 INSTALL_AUTO_UPDATE=0
@@ -199,12 +200,16 @@ if [ "$INSTALL_SERVICE" -eq 1 ]; then
   echo "    1. write $SERVICE_DST"
   echo "       (starts as root, drops privileges to '$RUN_USER' after the matrix inits)"
   echo "    2. run: systemctl daemon-reload"
-  echo "    3. run: systemctl enable --now $SERVICE_NAME"
+  echo "    3. run: systemctl enable $SERVICE_NAME, then (re)start it"
+  echo "    4. write /etc/systemd/system/$CONTROL_NAME.{path,service}"
+  echo "       (makes the web UI's Update and Reboot buttons work: the UI"
+  echo "        writes a one-word request, and these carry it out as root)"
+  echo "    5. run: systemctl enable --now $CONTROL_NAME.path"
   if [ "$INSTALL_AUTO_UPDATE" -eq 1 ]; then
-    echo "    4. write $UPDATE_DST"
+    echo "    6. write $UPDATE_DST"
     echo "       (on every boot: git pull, verify the new commit starts, and"
     echo "        roll back automatically if it does not)"
-    echo "    5. run: systemctl enable $UPDATE_NAME"
+    echo "    7. run: systemctl enable $UPDATE_NAME"
   fi
   echo "  Nothing else on the system is modified."
   if [ "$RUN_USER" = "root" ]; then
@@ -229,11 +234,25 @@ if [ "$INSTALL_SERVICE" -eq 1 ]; then
     fail "  sudo systemctl daemon-reload && sudo systemctl enable --now $SERVICE_NAME"
     exit 1
   fi
-  if ! systemctl enable --now "$SERVICE_NAME"; then
+  # restart, not just start: re-running the installer after a git pull
+  # should put the new code on the panels, not leave the old one running.
+  if ! systemctl enable "$SERVICE_NAME" || ! systemctl restart "$SERVICE_NAME"; then
     fail "Could not enable/start the service. Check: journalctl -u $SERVICE_NAME -n 50"
     exit 1
   fi
-  ok "Service installed, enabled at boot, and started"
+  ok "Service installed, enabled at boot, and (re)started"
+
+  for unit in "$CONTROL_NAME.service" "$CONTROL_NAME.path"; do
+    sed -e "s|__INSTALL_DIR__|$PROJECT_DIR|g" -e "s|__RUN_USER__|$RUN_USER|g" \
+        "$PROJECT_DIR/systemd/$unit" > "/etc/systemd/system/$unit"
+    chmod 644 "/etc/systemd/system/$unit"
+  done
+  systemctl daemon-reload
+  if systemctl enable --now "$CONTROL_NAME.path" >/dev/null 2>&1; then
+    ok "Web UI Update and Reboot buttons enabled"
+  else
+    fail "Could not enable $CONTROL_NAME.path. Check: journalctl -u $CONTROL_NAME"
+  fi
 
   if [ "$INSTALL_AUTO_UPDATE" -eq 1 ]; then
     sed -e "s|__INSTALL_DIR__|$PROJECT_DIR|g" -e "s|__RUN_USER__|$RUN_USER|g" \

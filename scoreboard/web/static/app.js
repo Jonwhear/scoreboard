@@ -208,6 +208,16 @@ function bindControls() {
     updateConfig({ rotation: { show_schedule: event.target.checked } });
   });
 
+  el('check-updates').addEventListener('click', checkForUpdates);
+  el('update-reboot').addEventListener('click', () => requestSystem(
+    'update-reboot',
+    'Download the latest version and reboot the Pi? The panels go dark for a minute or two.',
+    'Updating, then rebooting. This page reconnects when the Pi is back.'));
+  el('reboot').addEventListener('click', () => requestSystem(
+    'reboot',
+    'Reboot the Pi now? The panels go dark for a minute or two.',
+    'Rebooting. This page reconnects when the Pi is back.'));
+
   el('game-search').addEventListener('input', debounce(() => renderGames(), 200));
   el('unlock').addEventListener('click', () => setLock(''));
 }
@@ -628,6 +638,104 @@ async function refreshStatus() {
   }
 }
 
+/* -- software ---------------------------------------------------------- */
+
+const SYSTEM_INTERVAL = 15000;
+const SYSTEM_BUSY_INTERVAL = 3000;
+let systemTimer = null;
+let systemBusyUntil = 0;
+
+function scheduleSystem() {
+  clearTimeout(systemTimer);
+  const busy = Date.now() < systemBusyUntil;
+  systemTimer = setTimeout(loadSystem, busy ? SYSTEM_BUSY_INTERVAL : SYSTEM_INTERVAL);
+}
+
+async function loadSystem() {
+  let info;
+  try {
+    info = await api('/api/system');
+  } catch (error) {
+    // Expected while the Pi reboots; say so rather than looking broken.
+    el('software-state').textContent = Date.now() < systemBusyUntil
+      ? 'restarting…' : 'unreachable';
+    scheduleSystem();
+    return;
+  }
+  renderSystem(info);
+  scheduleSystem();
+}
+
+function renderSystem(info) {
+  const grid = el('software-grid');
+  grid.innerHTML = '';
+  if (!info.available) {
+    el('software-card').hidden = true;
+    return;
+  }
+  const v = info.version || {};
+  statusRow(grid, 'Version', v.commit
+    ? `${v.commit} · ${v.date ? relativeTime(v.date) : ''}\n${v.subject || ''}`
+    : 'unknown (not a git checkout?)');
+  statusRow(grid, 'Branch', v.branch || '—', 'mono');
+  statusRow(grid, 'Update on boot', info.boot_update_enabled
+    ? coloured('on', 'good') : coloured('off', 'warn'));
+  statusRow(grid, 'Remote control', info.controls_installed
+    ? coloured('ready', 'good') : coloured('not installed yet', 'warn'));
+
+  el('controls-missing').hidden = info.controls_installed;
+  el('update-reboot').disabled = !info.controls_installed || Boolean(info.pending);
+  el('reboot').disabled = !info.controls_installed || Boolean(info.pending);
+  el('software-state').textContent = info.pending ? `${info.pending} requested…` : '';
+
+  const log = el('software-log');
+  const lines = info.history || [];
+  log.hidden = !lines.length;
+  log.textContent = lines.join('\n');
+  log.scrollTop = log.scrollHeight;
+}
+
+async function checkForUpdates() {
+  const button = el('check-updates');
+  button.disabled = true;
+  el('software-state').textContent = 'checking…';
+  try {
+    const result = await api('/api/system/check', { method: 'POST' });
+    if (!result.ok) {
+      el('software-state').textContent = '';
+      toast(result.error, true);
+      return;
+    }
+    if (!result.behind) {
+      el('software-state').textContent = 'up to date';
+      toast('Already on the latest version');
+    } else {
+      el('software-state').textContent = `${result.behind} update(s) available`;
+      const log = el('software-log');
+      log.hidden = false;
+      log.textContent = `New on ${result.branch}:\n` + result.commits
+        .map((commit) => `  ${commit.commit}  ${commit.subject}`).join('\n');
+    }
+  } catch (error) {
+    el('software-state').textContent = '';
+    toast(error.message, true);
+  } finally {
+    button.disabled = false;
+  }
+}
+
+async function requestSystem(action, question, message) {
+  if (!window.confirm(question)) return;
+  try {
+    await api(`/api/system/${action}`, { method: 'POST' });
+    systemBusyUntil = Date.now() + 5 * 60 * 1000;
+    toast(message);
+    loadSystem();
+  } catch (error) {
+    toast(error.message, true);
+  }
+}
+
 /* -- preview ----------------------------------------------------------- */
 
 function refreshPreview() {
@@ -679,6 +787,7 @@ async function init() {
   }
   refreshStatus();
   refreshPreview();
+  loadSystem();
   startPolling();
 }
 

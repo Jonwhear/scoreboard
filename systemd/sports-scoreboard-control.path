@@ -1,0 +1,18 @@
+# Watch for an update or reboot request from the web UI.
+#
+# Installed by scripts/install.sh --service, which substitutes
+# __INSTALL_DIR__. The web UI runs unprivileged and cannot reboot the Pi,
+# so it writes one word to var/control/request; this unit sees the file
+# appear and starts sports-scoreboard-control.service, which runs
+# scripts/control.sh as root. Only "update", "update-reboot" and "reboot"
+# are understood.
+
+[Unit]
+Description=Watch for update/reboot requests from the scoreboard web UI
+
+[Path]
+PathExists=__INSTALL_DIR__/var/control/request
+Unit=sports-scoreboard-control.service
+
+[Install]
+WantedBy=multi-user.target
