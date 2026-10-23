@@ -392,3 +392,15 @@ class Standings:
             "stale": self.stale,
             "error": self.error,
         }
+
+
+@dataclass
+class TeamSchedule:
+    """One team's coming games, for the favourite-team schedule screen."""
+
+    team: GameTeam
+    games: List[Game] = field(default_factory=list)
+
+    @property
+    def key(self) -> str:
+        return self.team.key

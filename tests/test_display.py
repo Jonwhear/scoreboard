@@ -540,3 +540,48 @@ def test_the_runner_tells_a_scrolling_layout_how_long_it_is_held(tmp_path, monke
     runner._tick(115.0)
     assert [c.duration for c in seen] == [30.0, 30.0]
     assert [c.phase for c in seen] == [0.0, 15.0]
+
+
+def test_the_runner_builds_a_schedule_screen_for_each_favourite(tmp_path):
+    from scoreboard.samples import sample_schedule
+
+    schedule = sample_schedule()
+
+    class Schedules:
+        def __init__(self):
+            self.asked = []
+
+        def get(self, league, team_id):
+            self.asked.append((league, team_id))
+            return schedule.games if team_id == "8" else None
+
+    runner, display, state, _ = make_runner(tmp_path, {"sports": {
+        "enabled_leagues": ["nfl"],
+        "favorite_teams": [{"league": "nfl", "team_id": "8", "abbreviation": "DET"},
+                           {"league": "nfl", "team_id": "9", "abbreviation": "GB"}]}})
+    runner.schedules = Schedules()
+    runner._tick(0.0)
+    assert runner.schedules.asked == [("nfl", "8"), ("nfl", "9")]
+    titles = [screen.title for screen in runner._rotator.playlist]
+    assert "DET schedule" in titles, "GB plays DET in the sample, but has no schedule yet"
+    assert state.screen.layout == "schedule"
+
+
+def test_the_runner_skips_schedules_when_switched_off(tmp_path):
+    class Schedules:
+        def get(self, league, team_id):
+            raise AssertionError("should not be asked")
+
+    runner, _, _, _ = make_runner(tmp_path, {
+        "sports": {"favorite_teams": [{"league": "nfl", "team_id": "8"}]},
+        "rotation": {"show_schedule": False}})
+    runner.schedules = Schedules()
+    runner._tick(0.0)
+
+
+def test_the_sample_schedule_test_screen_renders(tmp_path):
+    runner, display, state, _ = make_runner(tmp_path)
+    assert runner.show_test_screen("sample_schedule", 5)
+    runner._tick(0.0)
+    assert state.screen.layout == "sample_schedule"
+    assert display.frames

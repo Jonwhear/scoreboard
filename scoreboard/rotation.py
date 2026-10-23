@@ -10,8 +10,10 @@ Priority order (highest first):
 2. other live games in enabled leagues
 3. upcoming favourite-team games
 4. recently completed favourite-team games
-5. other enabled games (upcoming, then finals)
-6. the idle screen
+5. each favourite team's next few games
+6. other enabled games (upcoming, then finals)
+7. league tables
+8. the idle screen
 """
 
 from __future__ import annotations
@@ -38,6 +40,7 @@ class ScreenKind(str, Enum):
     LIVE = "live"
     FAVORITE_UPCOMING = "favorite_upcoming"
     FAVORITE_FINAL = "favorite_final"
+    FAVORITE_SCHEDULE = "favorite_schedule"
     UPCOMING = "upcoming"
     FINAL = "final"
     STANDINGS = "standings"
@@ -53,6 +56,7 @@ class Layout(str, Enum):
     FINAL = "final"         # layout D
     IDLE = "idle"           # layout E
     STANDINGS = "standings" # layout F: a scrolling league table
+    SCHEDULE = "schedule"   # layout G: one team's next few games
 
 
 #: Lower sorts first.
@@ -62,11 +66,14 @@ _KIND_PRIORITY = {
     ScreenKind.LIVE: 1,
     ScreenKind.FAVORITE_UPCOMING: 2,
     ScreenKind.FAVORITE_FINAL: 3,
-    ScreenKind.UPCOMING: 4,
-    ScreenKind.FINAL: 5,
+    # Your teams' coming games outrank other teams' games: the screen
+    # exists only for favourites, and a busy slate should not trim it.
+    ScreenKind.FAVORITE_SCHEDULE: 4,
+    ScreenKind.UPCOMING: 5,
+    ScreenKind.FINAL: 6,
     # Tables are reference material rather than news, so they come after
     # anything actually happening, but before the idle clock.
-    ScreenKind.STANDINGS: 6,
+    ScreenKind.STANDINGS: 7,
     ScreenKind.IDLE: 9,
 }
 
@@ -158,6 +165,7 @@ def build_playlist(
     now: Optional[datetime] = None,
     favorite_keys: Optional[FrozenSet[str]] = None,
     standings: Optional[Dict[str, object]] = None,
+    schedules: Optional[Sequence[object]] = None,
 ) -> List[ScreenItem]:
     """Build the ordered playlist of screens for the current game set."""
     now = now or datetime.now(timezone.utc)
@@ -252,6 +260,7 @@ def build_playlist(
                      group_layout=Layout.FINAL, single_layout=Layout.FINAL)
         )
 
+    screens.extend(_schedule_screens(schedules, config, favorites))
     screens.extend(_standings_screens(standings, config))
 
     screens.sort(key=lambda screen: screen.priority)
@@ -261,6 +270,27 @@ def build_playlist(
 
     if not screens:
         screens.append(ScreenItem(ScreenKind.IDLE, Layout.IDLE, [], title="Idle"))
+    return screens
+
+
+def _schedule_screens(schedules: Optional[Sequence[object]], config,
+                      favorites) -> List[ScreenItem]:
+    """One screen per favourite team that has games coming up."""
+    if not config.rotation.show_schedule or not schedules:
+        return []
+    enabled = set(config.sports.enabled_leagues)
+    screens: List[ScreenItem] = []
+    for schedule in schedules:
+        team = getattr(schedule, "team", None)
+        if team is None or team.key not in favorites or team.league not in enabled:
+            continue
+        if not getattr(schedule, "games", None):
+            continue
+        screens.append(ScreenItem(
+            ScreenKind.FAVORITE_SCHEDULE, Layout.SCHEDULE, [],
+            title=f"{team.label} schedule", detail="favourite schedule",
+            payload=schedule, ref=team.key,
+        ))
     return screens
 
 

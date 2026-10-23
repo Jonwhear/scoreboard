@@ -38,7 +38,9 @@
     "lock_release_minutes": 30,
     "show_standings": false,
     "standings_leagues": [],
-    "standings_seconds": 20
+    "standings_seconds": 20,
+    "show_schedule": true,
+    "schedule_games": 4
   },
   "sleep": {
     "enabled": false,

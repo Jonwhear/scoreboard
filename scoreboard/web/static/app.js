@@ -130,6 +130,10 @@ function bindControls() {
     updateConfig({ display: { brightness: value } }));
   bindRange('screen-seconds', 'screen-seconds-out', (value) =>
     updateConfig({ rotation: { screen_seconds: value } }));
+  bindRange('max-screens', 'max-screens-out', (value) =>
+    updateConfig({ rotation: { max_screens: value } }));
+  bindRange('schedule-games', 'schedule-games-out', (value) =>
+    updateConfig({ rotation: { schedule_games: value } }));
 
   el('layout-mode').addEventListener('change', (event) =>
     updateConfig({ rotation: { layout_mode: event.target.value } }));
@@ -197,6 +201,11 @@ function bindControls() {
   standingsSeconds.addEventListener('input', () => {
     el('standings-seconds-out').textContent = standingsSeconds.value;
     updateConfig({ rotation: { standings_seconds: Number(standingsSeconds.value) } });
+  });
+
+  el('show-schedule').addEventListener('change', (event) => {
+    el('schedule-options').hidden = !event.target.checked;
+    updateConfig({ rotation: { show_schedule: event.target.checked } });
   });
 
   el('game-search').addEventListener('input', debounce(() => renderGames(), 200));
@@ -348,6 +357,12 @@ function applyConfig(config) {
     el('standings-options').hidden = !config.rotation.show_standings;
     el('standings-seconds').value = config.rotation.standings_seconds;
     el('standings-seconds-out').textContent = config.rotation.standings_seconds;
+    el('max-screens').value = config.rotation.max_screens;
+    el('max-screens-out').textContent = config.rotation.max_screens;
+    el('show-schedule').checked = config.rotation.show_schedule;
+    el('schedule-options').hidden = !config.rotation.show_schedule;
+    el('schedule-games').value = config.rotation.schedule_games;
+    el('schedule-games-out').textContent = config.rotation.schedule_games;
     state.lockedGame = config.rotation.locked_game || '';
   } finally {
     state.suppress = false;

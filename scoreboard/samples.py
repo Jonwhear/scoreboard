@@ -9,7 +9,7 @@ from __future__ import annotations
 from datetime import datetime, timedelta, timezone
 from typing import List
 
-from .models import Game, GameState, GameTeam
+from .models import Game, GameState, GameTeam, TeamSchedule
 
 
 def _team(league: str, team_id: str, abbr: str, name: str, score, color: str,
@@ -117,3 +117,27 @@ def sample_games(now: datetime = None) -> List[Game]:
     """A mixed slate covering every state."""
     now = now or datetime.now(timezone.utc)
     return sample_card_games(now) + sample_upcoming_games(now) + sample_final_games(now)
+
+
+def sample_schedule(now: datetime = None) -> TeamSchedule:
+    """A favourite's next few games, for the schedule screen's test button."""
+    now = now or datetime.now(timezone.utc)
+    det = _team("nfl", "8", "DET", "Detroit Lions", None, "#0076b6", "#b0b7bc")
+    opponents = [
+        (_team("nfl", "9", "GB", "Green Bay Packers", None, "#204e32"), False, 3),
+        (_team("nfl", "16", "MIN", "Minnesota Vikings", None, "#4f2683"), True, 10),
+        (_team("nfl", "3", "CHI", "Chicago Bears", None, "#0b162a"), True, 14),
+        (_team("nfl", "6", "DAL", "Dallas Cowboys", None, "#002a5c"), False, 21),
+        (_team("nfl", "21", "PHI", "Philadelphia Eagles", None, "#06424d"), True, 28),
+        (_team("nfl", "33", "BAL", "Baltimore Ravens", None, "#241773"), False, 35),
+    ]
+    games = []
+    for index, (opponent, at_home, days) in enumerate(opponents):
+        home, away = (det, opponent) if at_home else (opponent, det)
+        games.append(Game(
+            league="nfl", game_id=f"sample-sched-{index}",
+            start_time=(now + timedelta(days=days)).replace(minute=0, second=0),
+            state=GameState.PRE, home=home, away=away,
+            broadcast=("FOX", "CBS", "NBC", "ESPN", "FOX", "CBS")[index],
+        ))
+    return TeamSchedule(team=det, games=games[:4])

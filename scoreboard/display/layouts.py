@@ -27,7 +27,7 @@ from typing import Optional, Sequence, Tuple
 
 from PIL import Image, ImageDraw
 
-from ..models import Game, GameState, GameTeam, StandingsGroup
+from ..models import Game, GameState, GameTeam, StandingsGroup, TeamSchedule
 from ..rotation import Layout, ScreenItem
 from .fonts import Font, FontRegistry
 
@@ -1051,6 +1051,128 @@ def _row_as_team(row) -> GameTeam:
     )
 
 
+# -- layout G: a favourite's schedule --------------------------------------
+
+SCHEDULE_ROW_HEIGHT = 8
+#: Width of the team block on the left; dropped on a single panel.
+SCHEDULE_BLOCK_WIDTH = 28
+
+
+def render_schedule(schedule: TeamSchedule, context: RenderContext) -> Image.Image:
+    """One favourite team's next few games, a row each.
+
+    The team's crest holds the left edge; each row reads date, opponent
+    (``@`` marks an away game, as a printed schedule does) and local start
+    time. More games than fit scroll at a steady speed, like a table.
+    """
+    canvas = new_canvas(context.width, context.height)
+    draw = ImageDraw.Draw(canvas)
+    tiny = context.fonts.get("tiny")
+    team = schedule.team
+
+    left = 2
+    if context.width >= 96:
+        logo = min(SCHEDULE_BLOCK_WIDTH - 4, context.height - tiny.height - 4)
+        x0 = (SCHEDULE_BLOCK_WIDTH - logo) // 2
+        if paste_logo(canvas, context, team, (x0, 1, x0 + logo - 1, logo)):
+            tiny.draw_centered(draw, SCHEDULE_BLOCK_WIDTH // 2,
+                               context.height - tiny.height,
+                               tiny.fit(team.label, SCHEDULE_BLOCK_WIDTH - 2), BRIGHT)
+        else:
+            # No crest: the abbreviation is the mark, so it is not repeated.
+            draw_team_mark(canvas, draw, context, team,
+                           (1, 4, SCHEDULE_BLOCK_WIDTH - 2, context.height - 5))
+        _vline(draw, SCHEDULE_BLOCK_WIDTH, 2, context.height - 3, FAINT)
+        left = SCHEDULE_BLOCK_WIDTH + 3
+
+    width = context.width - left - 1
+    content_height = len(schedule.games) * SCHEDULE_ROW_HEIGHT
+    body = Image.new("RGB", (width, max(context.height, content_height)), BLACK)
+    body_draw = ImageDraw.Draw(body)
+    offset = table_scroll_offset(context.phase, content_height, context.height,
+                                 context.duration)
+    for index, game in enumerate(schedule.games):
+        row_y = index * SCHEDULE_ROW_HEIGHT
+        if row_y + SCHEDULE_ROW_HEIGHT <= offset or row_y >= offset + context.height:
+            continue
+        _draw_schedule_row(body, body_draw, context, team, game, row_y, width)
+    canvas.paste(body.crop((0, offset, width, offset + context.height)), (left, 0))
+
+    _draw_stale_marker(draw, context)
+    return canvas
+
+
+def _schedule_date(game: Game, context: RenderContext,
+                   with_weekday: bool = True) -> Tuple[str, Tuple[int, int, int]]:
+    if game.is_live:
+        return "LIVE", LIVE
+    start = local_time(game.start_time)
+    reference = context.now or datetime.now()
+    if reference.tzinfo is not None:
+        reference = reference.astimezone()
+    days = (start.date() - reference.date()).days
+    if days == 0:
+        return "TODAY", ACCENT
+    if days == 1:
+        return "TMRW", UPCOMING
+    date = f"{start.month}/{start.day}"
+    if with_weekday:
+        date = f"{start.strftime('%a').upper()} {date}"
+    return date, UPCOMING
+
+
+def _draw_schedule_row(
+    canvas: Image.Image,
+    draw: ImageDraw.ImageDraw,
+    context: RenderContext,
+    team: GameTeam,
+    game: Game,
+    row_y: int,
+    width: int,
+) -> None:
+    fonts = context.fonts
+    tiny, small = fonts.get("tiny"), fonts.get("small")
+    away = game.away.key == team.key
+    opponent = game.home if away else game.away
+
+    # A single panel has no room for the weekday; the date alone will do.
+    narrow = width < 80
+    date_text, date_color = _schedule_date(game, context, with_weekday=not narrow)
+    tiny.draw(draw, (0, row_y + 1), date_text, date_color)
+    x = tiny.text_width("12/31" if narrow else "WED 12/31") + 3
+
+    if away:
+        tiny.draw(draw, (x, row_y + 1), "@", DIM)
+    x += tiny.text_width("@") + 2
+
+    if game.is_live:
+        ours, theirs = (game.away, game.home) if away else (game.home, game.away)
+        right_text, right_color = f"{ours.score_text}-{theirs.score_text}", LIVE
+    else:
+        right_text, right_color = format_clock_only(game), DIM
+    right_width = tiny.text_width(right_text)
+
+    if not narrow and context.show_logos and paste_logo(
+            canvas, context, opponent, (x, row_y, x + 6, row_y + 6)):
+        x += 9
+    else:
+        _vline(draw, x, row_y, row_y + 6, readable(opponent.color))
+        x += 4
+    # The opponent matters more than the start time; drop the time first.
+    if x + small.text_width(opponent.label) + 3 + right_width > width:
+        small.draw(draw, (x, row_y), small.fit(opponent.label, max(4, width - x)), BRIGHT)
+        return
+    tiny.draw_right(draw, width - 1, row_y + 1, right_text, right_color)
+    label_room = width - right_width - 3 - x
+    small.draw(draw, (x, row_y), small.fit(opponent.label, max(4, label_room)), BRIGHT)
+
+    # On a wide canvas there is room for the channel, too.
+    if game.broadcast and not game.is_live:
+        free = width - right_width - 4 - (x + small.text_width(opponent.label) + 4)
+        if tiny.text_width(game.broadcast) <= free:
+            tiny.draw_right(draw, width - right_width - 4, row_y + 1, game.broadcast, ACCENT)
+
+
 def render_message(context: RenderContext, title: str, detail: str = "") -> Image.Image:
     """A plain two-line message (startup, fatal errors, test screens)."""
     canvas = new_canvas(context.width, context.height)
@@ -1118,6 +1240,8 @@ def render_screen(
             return render_finals(screen.games, context)
         if screen.layout is Layout.STANDINGS and screen.payload is not None:
             return render_standings(screen.payload, context, title=screen.title)
+        if screen.layout is Layout.SCHEDULE and screen.payload is not None:
+            return render_schedule(screen.payload, context)
         return render_idle(context, next_game=next_game, online=online)
     except Exception:
         log.exception("Layout %s failed; showing fallback frame", screen.layout)

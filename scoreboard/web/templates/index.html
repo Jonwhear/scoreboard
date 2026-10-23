@@ -39,6 +39,7 @@
       <button class="btn ghost" data-test="clock">Show clock</button>
       <button class="btn ghost" data-test="sample_game">Sample game</button>
       <button class="btn ghost" data-test="sample_cards">Sample cards</button>
+      <button class="btn ghost" data-test="sample_schedule">Sample schedule</button>
       <button class="btn ghost" data-test="test_pattern">Panel test</button>
       <button class="btn ghost" data-test="clear">Back to live</button>
     </div>
@@ -116,6 +117,11 @@
     </label>
 
     <label class="field">
+      <span>Most screens per rotation <output id="max-screens-out"></output></span>
+      <input id="max-screens" type="range" min="4" max="40" step="1">
+    </label>
+
+    <label class="field">
       <span>Layout</span>
       <select id="layout-mode">
         <option value="auto">Auto — featured for single games, cards for groups</option>
@@ -137,8 +143,10 @@
         <input type="checkbox" id="show-standings"><span>Show league tables</span>
       </label>
       <div id="standings-options" hidden>
-        <p class="note">A table scrolls vertically while it is on screen.
-          Soccer tables mark European places and relegation down the left edge.</p>
+        <p class="note">A long table scrolls at a steady speed for as long as it
+          is on screen. A short one -- an NFL division -- is shown whole, team
+          by team across the panels. Soccer tables mark European places and
+          relegation down the left edge.</p>
         <label class="field">
           <span>Seconds per table <output id="standings-seconds-out"></output></span>
           <input id="standings-seconds" type="range" min="5" max="60" step="1">
@@ -147,6 +155,22 @@
         <div id="standings-leagues" class="toggle-grid"></div>
         <p class="note">With none ticked, every enabled league that publishes a
           table is shown.</p>
+      </div>
+    </div>
+
+    <div class="subsection">
+      <label class="switch">
+        <input type="checkbox" id="show-schedule"><span>Favourite team schedules</span>
+      </label>
+      <div id="schedule-options" hidden>
+        <p class="note">A screen for each favourite team listing its next games:
+          date, opponent (<code>@</code> means away) and start time. Only your
+          favourite teams get one.</p>
+        <label class="field">
+          <span>Games to list <output id="schedule-games-out"></output></span>
+          <input id="schedule-games" type="range" min="1" max="10" step="1">
+        </label>
+        <p class="note">Four fit on the panels at once; more scroll past.</p>
       </div>
     </div>
 

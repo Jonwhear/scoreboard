@@ -9,7 +9,7 @@ from __future__ import annotations
 import abc
 from typing import List
 
-from ..models import LeagueSnapshot, Standings, TeamInfo
+from ..models import Game, LeagueSnapshot, Standings, TeamInfo
 
 
 class ProviderError(RuntimeError):
@@ -47,3 +47,11 @@ class SportsProvider(abc.ABC):
         table screens. Override it where the data exists.
         """
         raise ProviderError(f"{self.name} does not provide standings")
+
+    def fetch_team_schedule(self, league_id: str, team_id: str) -> List[Game]:
+        """Return one team's games for the season, past and future.
+
+        Not abstract for the same reason as standings: the schedule screen
+        is simply absent for a provider that cannot supply one.
+        """
+        raise ProviderError(f"{self.name} does not provide team schedules")

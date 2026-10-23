@@ -1,0 +1,493 @@
+{
+ "team": {
+  "id": "8",
+  "abbreviation": "DET",
+  "displayName": "Detroit Lions",
+  "shortDisplayName": "Lions",
+  "logos": [
+   {
+    "href": "https://a.espncdn.com/i/teamlogos/nfl/500/det.png"
+   }
+  ]
+ },
+ "events": [
+  {
+   "id": "401",
+   "date": "2025-10-12T17:00Z",
+   "name": "x",
+   "shortName": "x",
+   "competitions": [
+    {
+     "id": "401",
+     "date": "2025-10-12T17:00Z",
+     "competitors": [
+      {
+       "id": "8",
+       "type": "team",
+       "homeAway": "home",
+       "team": {
+        "id": "8",
+        "abbreviation": "DET",
+        "displayName": "Detroit Lions",
+        "shortDisplayName": "Lions",
+        "logos": [
+         {
+          "href": "https://a.espncdn.com/i/teamlogos/nfl/500/det.png"
+         }
+        ]
+       },
+       "score": {
+        "value": 34.0,
+        "displayValue": "34"
+       }
+      },
+      {
+       "id": "14",
+       "type": "team",
+       "homeAway": "away",
+       "team": {
+        "id": "14",
+        "abbreviation": "LAR",
+        "displayName": "Los Angeles Rams",
+        "shortDisplayName": "Rams",
+        "logos": [
+         {
+          "href": "https://a.espncdn.com/i/teamlogos/nfl/500/lar.png"
+         }
+        ]
+       },
+       "score": {
+        "value": 31.0,
+        "displayValue": "31"
+       }
+      }
+     ],
+     "broadcasts": [
+      {
+       "type": {
+        "shortName": "TV"
+       },
+       "media": {
+        "shortName": "FOX"
+       }
+      }
+     ],
+     "status": {
+      "period": 4,
+      "displayClock": "0:00",
+      "type": {
+       "state": "post",
+       "completed": true,
+       "detail": "Final",
+       "shortDetail": "Final"
+      }
+     }
+    }
+   ]
+  },
+  {
+   "id": "402",
+   "date": "2025-10-19T20:25Z",
+   "name": "x",
+   "shortName": "x",
+   "competitions": [
+    {
+     "id": "402",
+     "date": "2025-10-19T20:25Z",
+     "competitors": [
+      {
+       "id": "33",
+       "type": "team",
+       "homeAway": "home",
+       "team": {
+        "id": "33",
+        "abbreviation": "BAL",
+        "displayName": "Baltimore Ravens",
+        "shortDisplayName": "Ravens",
+        "logos": [
+         {
+          "href": "https://a.espncdn.com/i/teamlogos/nfl/500/bal.png"
+         }
+        ]
+       },
+       "score": {
+        "value": 27.0,
+        "displayValue": "27"
+       }
+      },
+      {
+       "id": "8",
+       "type": "team",
+       "homeAway": "away",
+       "team": {
+        "id": "8",
+        "abbreviation": "DET",
+        "displayName": "Detroit Lions",
+        "shortDisplayName": "Lions",
+        "logos": [
+         {
+          "href": "https://a.espncdn.com/i/teamlogos/nfl/500/det.png"
+         }
+        ]
+       },
+       "score": {
+        "value": 24.0,
+        "displayValue": "24"
+       }
+      }
+     ],
+     "broadcasts": [
+      {
+       "type": {
+        "shortName": "TV"
+       },
+       "media": {
+        "shortName": "CBS"
+       }
+      }
+     ],
+     "status": {
+      "period": 4,
+      "displayClock": "0:00",
+      "type": {
+       "state": "post",
+       "completed": true,
+       "detail": "Final",
+       "shortDetail": "Final"
+      }
+     }
+    }
+   ]
+  },
+  {
+   "id": "403",
+   "date": "2025-11-02T18:00Z",
+   "name": "x",
+   "shortName": "x",
+   "competitions": [
+    {
+     "id": "403",
+     "date": "2025-11-02T18:00Z",
+     "competitors": [
+      {
+       "id": "8",
+       "type": "team",
+       "homeAway": "home",
+       "team": {
+        "id": "8",
+        "abbreviation": "DET",
+        "displayName": "Detroit Lions",
+        "shortDisplayName": "Lions",
+        "logos": [
+         {
+          "href": "https://a.espncdn.com/i/teamlogos/nfl/500/det.png"
+         }
+        ]
+       }
+      },
+      {
+       "id": "16",
+       "type": "team",
+       "homeAway": "away",
+       "team": {
+        "id": "16",
+        "abbreviation": "MIN",
+        "displayName": "Minnesota Vikings",
+        "shortDisplayName": "Vikings",
+        "logos": [
+         {
+          "href": "https://a.espncdn.com/i/teamlogos/nfl/500/min.png"
+         }
+        ]
+       }
+      }
+     ],
+     "broadcasts": [
+      {
+       "type": {
+        "shortName": "TV"
+       },
+       "media": {
+        "shortName": "FOX"
+       }
+      }
+     ],
+     "status": {
+      "period": 0,
+      "displayClock": "0:00",
+      "type": {
+       "state": "pre",
+       "completed": false,
+       "detail": "Sun, Nov 2nd at 1:00 PM EST",
+       "shortDetail": "11/2 - 1:00 PM EST"
+      }
+     }
+    }
+   ]
+  },
+  {
+   "id": "404",
+   "date": "2025-11-09T18:00Z",
+   "name": "x",
+   "shortName": "x",
+   "competitions": [
+    {
+     "id": "404",
+     "date": "2025-11-09T18:00Z",
+     "competitors": [
+      {
+       "id": "6",
+       "type": "team",
+       "homeAway": "home",
+       "team": {
+        "id": "6",
+        "abbreviation": "DAL",
+        "displayName": "Dallas Cowboys",
+        "shortDisplayName": "Cowboys",
+        "logos": [
+         {
+          "href": "https://a.espncdn.com/i/teamlogos/nfl/500/dal.png"
+         }
+        ]
+       }
+      },
+      {
+       "id": "8",
+       "type": "team",
+       "homeAway": "away",
+       "team": {
+        "id": "8",
+        "abbreviation": "DET",
+        "displayName": "Detroit Lions",
+        "shortDisplayName": "Lions",
+        "logos": [
+         {
+          "href": "https://a.espncdn.com/i/teamlogos/nfl/500/det.png"
+         }
+        ]
+       }
+      }
+     ],
+     "broadcasts": [
+      {
+       "type": {
+        "shortName": "TV"
+       },
+       "media": {
+        "shortName": "CBS"
+       }
+      }
+     ],
+     "status": {
+      "period": 0,
+      "displayClock": "0:00",
+      "type": {
+       "state": "pre",
+       "completed": false,
+       "detail": "Sun, Nov 2nd at 1:00 PM EST",
+       "shortDetail": "11/2 - 1:00 PM EST"
+      }
+     }
+    }
+   ]
+  },
+  {
+   "id": "405",
+   "date": "2025-11-16T21:25Z",
+   "name": "x",
+   "shortName": "x",
+   "competitions": [
+    {
+     "id": "405",
+     "date": "2025-11-16T21:25Z",
+     "competitors": [
+      {
+       "id": "9",
+       "type": "team",
+       "homeAway": "home",
+       "team": {
+        "id": "9",
+        "abbreviation": "GB",
+        "displayName": "Green Bay Packers",
+        "shortDisplayName": "Packers",
+        "logos": [
+         {
+          "href": "https://a.espncdn.com/i/teamlogos/nfl/500/gb.png"
+         }
+        ]
+       }
+      },
+      {
+       "id": "8",
+       "type": "team",
+       "homeAway": "away",
+       "team": {
+        "id": "8",
+        "abbreviation": "DET",
+        "displayName": "Detroit Lions",
+        "shortDisplayName": "Lions",
+        "logos": [
+         {
+          "href": "https://a.espncdn.com/i/teamlogos/nfl/500/det.png"
+         }
+        ]
+       }
+      }
+     ],
+     "broadcasts": [
+      {
+       "type": {
+        "shortName": "TV"
+       },
+       "media": {
+        "shortName": "NBC"
+       }
+      }
+     ],
+     "status": {
+      "period": 0,
+      "displayClock": "0:00",
+      "type": {
+       "state": "pre",
+       "completed": false,
+       "detail": "Sun, Nov 2nd at 1:00 PM EST",
+       "shortDetail": "11/2 - 1:00 PM EST"
+      }
+     }
+    }
+   ]
+  },
+  {
+   "id": "406",
+   "date": "2025-11-23T18:00Z",
+   "name": "x",
+   "shortName": "x",
+   "competitions": [
+    {
+     "id": "406",
+     "date": "2025-11-23T18:00Z",
+     "competitors": [
+      {
+       "id": "8",
+       "type": "team",
+       "homeAway": "home",
+       "team": {
+        "id": "8",
+        "abbreviation": "DET",
+        "displayName": "Detroit Lions",
+        "shortDisplayName": "Lions",
+        "logos": [
+         {
+          "href": "https://a.espncdn.com/i/teamlogos/nfl/500/det.png"
+         }
+        ]
+       }
+      },
+      {
+       "id": "3",
+       "type": "team",
+       "homeAway": "away",
+       "team": {
+        "id": "3",
+        "abbreviation": "CHI",
+        "displayName": "Chicago Bears",
+        "shortDisplayName": "Bears",
+        "logos": [
+         {
+          "href": "https://a.espncdn.com/i/teamlogos/nfl/500/chi.png"
+         }
+        ]
+       }
+      }
+     ],
+     "broadcasts": [
+      {
+       "type": {
+        "shortName": "TV"
+       },
+       "media": {
+        "shortName": "FOX"
+       }
+      }
+     ],
+     "status": {
+      "period": 0,
+      "displayClock": "0:00",
+      "type": {
+       "state": "pre",
+       "completed": false,
+       "detail": "Sun, Nov 2nd at 1:00 PM EST",
+       "shortDetail": "11/2 - 1:00 PM EST"
+      }
+     }
+    }
+   ]
+  },
+  {
+   "id": "407",
+   "date": "2025-11-27T17:30Z",
+   "name": "x",
+   "shortName": "x",
+   "competitions": [
+    {
+     "id": "407",
+     "date": "2025-11-27T17:30Z",
+     "competitors": [
+      {
+       "id": "8",
+       "type": "team",
+       "homeAway": "home",
+       "team": {
+        "id": "8",
+        "abbreviation": "DET",
+        "displayName": "Detroit Lions",
+        "shortDisplayName": "Lions",
+        "logos": [
+         {
+          "href": "https://a.espncdn.com/i/teamlogos/nfl/500/det.png"
+         }
+        ]
+       }
+      },
+      {
+       "id": "21",
+       "type": "team",
+       "homeAway": "away",
+       "team": {
+        "id": "21",
+        "abbreviation": "PHI",
+        "displayName": "Philadelphia Eagles",
+        "shortDisplayName": "Eagles",
+        "logos": [
+         {
+          "href": "https://a.espncdn.com/i/teamlogos/nfl/500/phi.png"
+         }
+        ]
+       }
+      }
+     ],
+     "broadcasts": [
+      {
+       "type": {
+        "shortName": "TV"
+       },
+       "media": {
+        "shortName": "CBS"
+       }
+      }
+     ],
+     "status": {
+      "period": 0,
+      "displayClock": "0:00",
+      "type": {
+       "state": "pre",
+       "completed": false,
+       "detail": "Sun, Nov 2nd at 1:00 PM EST",
+       "shortDetail": "11/2 - 1:00 PM EST"
+      }
+     }
+    }
+   ]
+  }
+ ]
+}

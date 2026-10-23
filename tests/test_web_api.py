@@ -368,3 +368,30 @@ def test_standings_settings_are_configurable(client, services):
     assert rotation.show_standings is True
     assert rotation.standings_seconds == 35
     assert rotation.standings_leagues == ["epl", "nfl"]
+
+
+def test_schedule_settings_are_configurable(client, services):
+    defaults = services.config_store.config.rotation
+    assert (defaults.show_schedule, defaults.schedule_games) == (True, 4)
+    client.post("/api/config", json={"rotation": {
+        "show_schedule": False, "schedule_games": 6, "max_screens": 24}})
+    rotation = services.config_store.config.rotation
+    assert (rotation.show_schedule, rotation.schedule_games) == (False, 6)
+    assert rotation.max_screens == 24
+
+
+def test_schedule_games_are_clamped(client, services):
+    client.post("/api/config", json={"rotation": {"schedule_games": 99}})
+    assert services.config_store.config.rotation.schedule_games == 10
+
+
+def test_the_page_has_the_new_controls(client):
+    page = client.get("/").data
+    for control in (b'id="show-schedule"', b'id="schedule-games"', b'id="max-screens"',
+                    b'data-test="sample_schedule"'):
+        assert control in page
+
+
+def test_the_sample_schedule_is_a_test_screen(client, services):
+    response = client.post("/api/actions/test", json={"screen": "sample_schedule"})
+    assert response.status_code == 200

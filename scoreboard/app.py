@@ -37,6 +37,7 @@ from .providers import build_provider
 from .runner import DisplayRunner
 from .scheduler import DataScheduler
 from .state import AppState
+from .schedules import ScheduleCache
 from .standings import StandingsCache
 from .teams import TeamCatalog
 
@@ -176,6 +177,7 @@ def check_only(args: argparse.Namespace) -> int:
         provider = build_provider("espn", client=http)
         catalog = TeamCatalog(provider, paths.TEAM_CACHE_DIR)
         standings = StandingsCache(provider, paths.STANDINGS_CACHE_DIR)
+        schedules = ScheduleCache(provider)
         scheduler = DataScheduler(provider, state, store, logos=logos)
 
         # Render one frame of every layout through the real pipeline. A
@@ -184,7 +186,7 @@ def check_only(args: argparse.Namespace) -> int:
         display = PreviewDisplay(config.display)
         display.start()
         runner = DisplayRunner(display, state, store, fonts, logos=logos,
-                               standings=standings)
+                               standings=standings, schedules=schedules)
         runner._tick(0.0)
         if display.image is None:
             log.error("Startup check: no frame was rendered")
@@ -239,10 +241,12 @@ def run(args: argparse.Namespace) -> int:
     provider = build_provider("espn", client=http)
     catalog = TeamCatalog(provider, paths.TEAM_CACHE_DIR)
     standings = StandingsCache(provider, paths.STANDINGS_CACHE_DIR)
+    schedules = ScheduleCache(provider)
 
     scheduler = DataScheduler(provider, state, store, logos=logos, stop_event=stop_event)
     runner = DisplayRunner(display, state, store, fonts, logos=logos,
-                           stop_event=stop_event, standings=standings)
+                           stop_event=stop_event, standings=standings,
+                           schedules=schedules)
 
     def on_config_change(new_config) -> None:
         logos.enabled = new_config.display.show_logos

@@ -230,6 +230,10 @@ class RotationConfig:
     standings_leagues: List[str] = field(default_factory=list)
     #: Tables get their own, longer dwell so a full table can scroll past.
     standings_seconds: int = 20
+    #: A screen per favourite team listing its next few games.
+    show_schedule: bool = True
+    #: How many of those games. More than fit on the panel scroll past.
+    schedule_games: int = 4
 
     @classmethod
     def from_dict(cls, data: Dict[str, Any]) -> "RotationConfig":
@@ -253,6 +257,8 @@ class RotationConfig:
             show_standings=_as_bool(data.get("show_standings"), False),
             standings_leagues=filter_known(data.get("standings_leagues") or []),
             standings_seconds=_clamp_int(data.get("standings_seconds"), 5, 120, 20),
+            show_schedule=_as_bool(data.get("show_schedule"), True),
+            schedule_games=_clamp_int(data.get("schedule_games"), 1, 10, 4),
         )
 
 

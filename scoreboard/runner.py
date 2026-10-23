@@ -25,9 +25,11 @@ from .display.fonts import FontRegistry
 from .display.layouts import RenderContext, render_screen, render_test_pattern, render_message
 from .display import layouts
 from .logos import LogoCache
-from .models import Game
+from .models import Game, GameTeam, TeamSchedule
 from .rotation import Rotator, build_playlist
-from .samples import sample_card_games, sample_live_game, sample_upcoming_games
+from .samples import (sample_card_games, sample_live_game, sample_schedule,
+                      sample_upcoming_games)
+from .schedules import build_team_schedule
 from .state import AppState, ScreenInfo
 
 log = logging.getLogger(__name__)
@@ -39,7 +41,8 @@ IDLE_ITEMS = 6                  # games the idle screen cycles through
 IDLE_ITEM_SECONDS = 5.0         # how long each one stays up
 
 #: Test screens the web UI can request.
-TEST_SCREENS = ("clock", "sample_game", "sample_cards", "sample_upcoming", "test_pattern")
+TEST_SCREENS = ("clock", "sample_game", "sample_cards", "sample_upcoming",
+                "sample_schedule", "test_pattern")
 
 
 class DisplayRunner(threading.Thread):
@@ -54,6 +57,7 @@ class DisplayRunner(threading.Thread):
         logos: Optional[LogoCache] = None,
         stop_event: Optional[threading.Event] = None,
         standings: Optional[object] = None,
+        schedules: Optional[object] = None,
     ) -> None:
         super().__init__(name="display-loop", daemon=True)
         self.display = display
@@ -62,6 +66,7 @@ class DisplayRunner(threading.Thread):
         self.fonts = fonts
         self.logos = logos
         self.standings = standings
+        self.schedules = schedules
         self._stop_event = stop_event or threading.Event()
         self._lock = threading.Lock()
         self._rotator = Rotator(config_store.config.rotation.screen_seconds)
@@ -160,7 +165,8 @@ class DisplayRunner(threading.Thread):
         if self._last_playlist is None or monotonic_now - self._last_playlist >= PLAYLIST_INTERVAL:
             games = self.state.games()
             self._rotator.set_playlist(
-                build_playlist(games, config, standings=self._standings_for(config))
+                build_playlist(games, config, standings=self._standings_for(config),
+                               schedules=self._schedules_for(config, games))
             )
             self._last_playlist = monotonic_now
 
@@ -202,6 +208,8 @@ class DisplayRunner(threading.Thread):
             image = layouts.render_cards(sample_card_games(), context)
         elif name == "sample_upcoming":
             image = layouts.render_upcoming(sample_upcoming_games(), context)
+        elif name == "sample_schedule":
+            image = layouts.render_schedule(sample_schedule(), context)
         else:  # pragma: no cover - guarded by show_test_screen
             image = render_message(context, "SCOREBOARD", name)
         return image, ScreenInfo(kind="test", layout=name, title=f"Test: {name}")
@@ -287,6 +295,31 @@ class DisplayRunner(threading.Thread):
             if table is not None and table.groups:
                 tables[league] = table
         return tables or None
+
+    def _schedules_for(self, config, games: List[Game]) -> List[TeamSchedule]:
+        """Each enabled favourite's next few games, best data first.
+
+        Asking the cache is what triggers its background refresh, so a
+        newly added favourite has a schedule within a few seconds.
+        """
+        if self.schedules is None or not config.rotation.show_schedule:
+            return []
+        enabled = set(config.sports.enabled_leagues)
+        result = []
+        for favorite in config.sports.favorite_teams:
+            if favorite.league not in enabled:
+                continue
+            fallback = GameTeam(league=favorite.league, team_id=favorite.team_id,
+                                abbreviation=favorite.abbreviation,
+                                display_name=favorite.display_name)
+            schedule = build_team_schedule(
+                favorite.league, favorite.team_id,
+                self.schedules.get(favorite.league, favorite.team_id), games,
+                config.rotation.schedule_games, fallback=fallback,
+            )
+            if schedule is not None:
+                result.append(schedule)
+        return result
 
     def _idle_item(self, config, monotonic_now: float) -> Optional[Game]:
         """The game the idle screen should show right now, cycling slowly."""

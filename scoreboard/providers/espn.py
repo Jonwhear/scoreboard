@@ -218,6 +218,20 @@ class EspnProvider(SportsProvider):
                  " [stale cache]" if result.from_cache else "")
         return standings
 
+    def fetch_team_schedule(self, league_id: str, team_id: str) -> List[Game]:
+        endpoint = ESPN_LEAGUES.get(league_id)
+        if endpoint is None:
+            raise ProviderError(f"league {league_id!r} not supported")
+        url = f"{endpoint.base}/teams/{team_id}/schedule"
+        # Soccer schedules list results unless asked for the fixtures.
+        params = {"fixture": "true"} if endpoint.sport == "soccer" else None
+        result = self.client.get_json(url, params=params,
+                                      cache_key=f"schedule-{league_id}-{team_id}")
+        games = self.parse_scoreboard(league_id, result.data)
+        log.info("%s: schedule for team %s has %d game(s)%s", league_id, team_id,
+                 len(games), " [stale cache]" if result.from_cache else "")
+        return games
+
     # -- parsing (pure functions over already-decoded JSON) ---------------
 
     def parse_standings(self, league_id: str, payload: Any) -> List[StandingsGroup]:
@@ -467,7 +481,7 @@ class EspnProvider(SportsProvider):
             display_name=display_name,
             short_name=_as_str(raw.get("shortDisplayName")),
             location=_as_str(raw.get("location")),
-            score=_as_int(competitor.get("score")),
+            score=self._score(competitor.get("score")),
             logo_url=self._logo_url(raw),
             color=normalize_color(raw.get("color")),
             alt_color=normalize_color(raw.get("alternateColor")),
@@ -477,6 +491,16 @@ class EspnProvider(SportsProvider):
             winner=bool(competitor.get("winner")),
             has_possession=bool(possession_id) and possession_id == team_id,
         )
+
+    @staticmethod
+    def _score(raw: Any) -> Optional[int]:
+        """A score is a string on the scoreboard but an object in schedules."""
+        if isinstance(raw, dict):
+            value = _as_int(raw.get("displayValue"))
+            if value is None and isinstance(raw.get("value"), (int, float)):
+                value = int(raw["value"])
+            return value
+        return _as_int(raw)
 
     @staticmethod
     def _logo_url(raw: Any) -> Optional[str]:
@@ -507,6 +531,10 @@ class EspnProvider(SportsProvider):
             names = _dig(broadcast, "names", default=[])
             if isinstance(names, list) and names:
                 return _as_str(names[0]) or None
+            # The team-schedule endpoint describes broadcasts differently.
+            media = _as_str(_dig(broadcast, "media", "shortName"))
+            if media:
+                return media
         for geo in _dig(competition, "geoBroadcasts", default=[]) or []:
             name = _as_str(_dig(geo, "media", "shortName"))
             if name:
