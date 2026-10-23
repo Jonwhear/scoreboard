@@ -37,6 +37,7 @@ class _EspnLeague:
     path: str
     scoreboard_params: Dict[str, Any] = None  # type: ignore[assignment]
     teams_params: Dict[str, Any] = None  # type: ignore[assignment]
+    standings_params: Dict[str, Any] = None  # type: ignore[assignment]
 
     @property
     def base(self) -> str:
@@ -49,7 +50,9 @@ class _EspnLeague:
 
 #: Canonical league id -> ESPN endpoint description.
 ESPN_LEAGUES: Dict[str, _EspnLeague] = {
-    "nfl": _EspnLeague("football", "nfl"),
+    # level=3 asks for divisions rather than whole conferences: AFC and
+    # NFC only matter for playoff seeding, the division is the race.
+    "nfl": _EspnLeague("football", "nfl", standings_params={"level": 3}),
     # groups=80 is ESPN's FBS grouping; without it the scoreboard is a
     # narrow "top 25" selection rather than the full slate.
     "ncaaf": _EspnLeague("football", "college-football",
@@ -107,6 +110,17 @@ def _parse_datetime(value: Any) -> datetime:
         except ValueError:
             log.debug("Unparseable event date %r", value)
     return datetime.now(timezone.utc)
+
+
+#: The letter ESPN puts beside a US-league team late in a season, spelled
+#: out so the layouts can treat it like a soccer table's zone note.
+_CLINCHERS = {
+    "z": "Clinched first-round bye",
+    "*": "Clinched home field",
+    "y": "Clinched division",
+    "x": "Clinched playoff berth",
+    "e": "Eliminated",
+}
 
 
 class MalformedEvent(ValueError):
@@ -183,8 +197,10 @@ class EspnProvider(SportsProvider):
         if endpoint is None:
             return Standings(league=league_id, error=f"league {league_id!r} not supported")
         url = f"{endpoint.standings_base}/standings"
+        params = dict(endpoint.standings_params or {})
         try:
-            result = self.client.get_json(url, cache_key=f"standings-{league_id}")
+            result = self.client.get_json(url, params=params or None,
+                                          cache_key=f"standings-{league_id}")
         except FetchError as exc:
             log.warning("Standings fetch failed for %s: %s", league_id, exc)
             return Standings(league=league_id, error=str(exc))
@@ -207,28 +223,35 @@ class EspnProvider(SportsProvider):
     def parse_standings(self, league_id: str, payload: Any) -> List[StandingsGroup]:
         """Normalize a standings payload.
 
-        ESPN returns either a single table or a list of conference /
-        division / group children, so handle both and skip anything we
-        cannot read rather than losing the whole table to one odd entry.
+        ESPN returns a single table, a list of conference / group children,
+        or -- when asked for divisions -- conferences whose children are the
+        divisions. Walk the tree and make a table of every innermost level,
+        skipping anything we cannot read rather than losing the whole set
+        to one odd entry.
         """
         groups: List[StandingsGroup] = []
-        children = _dig(payload, "children", default=None)
-        if isinstance(children, list) and children:
-            for child in children:
-                entries = _dig(child, "standings", "entries", default=[])
-                name = _as_str(_dig(child, "name")) or _as_str(_dig(child, "abbreviation"))
-                group = self._parse_standings_group(league_id, name, entries)
-                if group.rows:
-                    groups.append(group)
-        else:
-            entries = _dig(payload, "standings", "entries", default=[])
-            name = _as_str(_dig(payload, "name")) or league_id.upper()
-            group = self._parse_standings_group(league_id, name, entries)
-            if group.rows:
-                groups.append(group)
+        self._collect_standings(league_id, payload, groups, depth=0)
         if not groups:
             log.warning("%s: no usable standings entries in response", league_id)
         return groups
+
+    def _collect_standings(
+        self, league_id: str, node: Any, groups: List[StandingsGroup], depth: int
+    ) -> None:
+        if not isinstance(node, dict) or depth > 4:
+            return
+        children = _dig(node, "children", default=None)
+        if isinstance(children, list) and children:
+            for child in children:
+                self._collect_standings(league_id, child, groups, depth + 1)
+            return
+        entries = _dig(node, "standings", "entries", default=[])
+        name = _as_str(_dig(node, "name")) or _as_str(_dig(node, "abbreviation"))
+        if not name and depth == 0:
+            name = league_id.upper()
+        group = self._parse_standings_group(league_id, name, entries)
+        if group.rows:
+            groups.append(group)
 
     def _parse_standings_group(
         self, league_id: str, name: str, entries: Any
@@ -248,10 +271,12 @@ class EspnProvider(SportsProvider):
         # order ESPN sent, which is already the table order.
         if rows and all(row.rank for row in rows):
             rows.sort(key=lambda row: row.rank or 0)
-        else:
+        # The rank shown is the position in *this* table. A division's
+        # entries carry conference-wide playoff seeds (1, 6, 9, 14), which
+        # order the division correctly but read as nonsense beside it.
+        if [row.rank for row in rows] != list(range(1, len(rows) + 1)):
             for position, row in enumerate(rows, start=1):
-                if not row.rank:
-                    row.rank = position
+                row.rank = position
         return StandingsGroup(league=league_id, name=name, rows=rows)
 
     def _parse_standings_row(self, league_id: str, entry: Any) -> Optional[StandingsRow]:
@@ -313,7 +338,8 @@ class EspnProvider(SportsProvider):
             games_behind=text("gamesBehind"),
             logo_url=self._logo_url(raw_team),
             color=normalize_color(raw_team.get("color")),
-            note=_as_str(_dig(entry, "note", "description")) or None,
+            note=(_as_str(_dig(entry, "note", "description"))
+                  or _CLINCHERS.get(_as_str(text("clincher")).lower()) or None),
             note_color=normalize_color(_dig(entry, "note", "color")),
         )
 

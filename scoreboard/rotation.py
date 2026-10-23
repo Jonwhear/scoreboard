@@ -85,6 +85,10 @@ class ScreenItem:
     duration: Optional[float] = None
     #: Carried for layouts that are not about games (a standings table).
     payload: Optional[object] = None
+    #: Identity for a screen with no games, e.g. ``"epl:Premier League"``.
+    #: Without it every table would share one key, and each playlist
+    #: rebuild would send the rotator back to the first of them.
+    ref: str = ""
 
     @property
     def priority(self) -> int:
@@ -95,7 +99,7 @@ class ScreenItem:
         """Stable identity, so rotation survives a data refresh."""
         return f"{self.kind.value}|{self.layout.value}|" + ",".join(
             game.key for game in self.games
-        )
+        ) + (f"|{self.ref}" if self.ref else "")
 
 
 def find_locked_game(
@@ -266,18 +270,24 @@ def _standings_screens(standings: Optional[Dict[str, object]], config) -> List[S
     if not rotation.show_standings or not standings:
         return []
     wanted = rotation.standings_leagues or config.sports.enabled_leagues
+    favorites = config.sports.favorite_keys
     screens: List[ScreenItem] = []
     for league in wanted:
         table = standings.get(league)
         if table is None or not getattr(table, "groups", None):
             continue
-        for group in table.groups:
-            if not group.rows:
-                continue
+        # Within a league, the table your team is in goes first: with eight
+        # NFL divisions, that is the one you would otherwise wait for.
+        groups = sorted(
+            (group for group in table.groups if group.rows),
+            key=lambda group: not any(row.key in favorites for row in group.rows),
+        )
+        for group in groups:
             screens.append(ScreenItem(
                 ScreenKind.STANDINGS, Layout.STANDINGS, [],
                 title=group.name or league.upper(), detail="standings",
                 duration=float(rotation.standings_seconds), payload=group,
+                ref=f"{league}:{group.name}",
             ))
     return screens
 

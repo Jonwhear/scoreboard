@@ -65,6 +65,9 @@ class RenderContext:
     #: this instead of keeping their own clock, which keeps them pure
     #: functions of (data, phase) and therefore testable frame by frame.
     phase: float = 0.0
+    #: Seconds this screen will be held in total, so a scrolling layout can
+    #: spread its travel evenly across the whole of it.
+    duration: Optional[float] = None
 
     @property
     def clock_now(self) -> datetime:
@@ -839,12 +842,13 @@ def _draw_idle_game(
 
 # -- layout F: league table ------------------------------------------------
 
-#: Pixels a table scrolls per second.
+#: Scroll speed when the screen's duration is unknown (a test screen).
 TABLE_SCROLL_SPEED = 7.0
-#: Rows pause at the top and bottom of a scroll so they can be read.
-TABLE_SCROLL_PAUSE = 1.5
 TABLE_ROW_HEIGHT = 8
 TABLE_HEADER_HEIGHT = 7
+#: A table this narrow per team is shown as columns, all at once, rather
+#: than scrolled: four teams across two panels, six across three.
+DIVISION_COLUMN_MIN = 28
 
 #: Zone colours, matched against the note ESPN attaches to a position.
 ZONE_COLORS = (
@@ -870,18 +874,25 @@ def zone_color(note: Optional[str], fallback: Optional[str] = None) -> Optional[
     return None
 
 
-def table_scroll_offset(phase: float, content_height: int, view_height: int) -> int:
+def table_scroll_offset(
+    phase: float, content_height: int, view_height: int,
+    duration: Optional[float] = None,
+) -> int:
     """How far a table of ``content_height`` has scrolled at ``phase`` seconds.
 
-    Scrolls down, pauses, and holds at the bottom; the rotation moves on
-    before it would need to loop, so there is no jarring snap back to the
-    top mid-read.
+    The scroll is linear across the whole time the screen is held: it
+    starts moving at once, never pauses, and reaches the last row exactly
+    as the screen ends. A 30-second table therefore moves at one steady
+    speed, and a longer hold simply means a slower, easier read.
     """
     overflow = max(0, content_height - view_height)
     if overflow <= 0:
         return 0
-    travelled = max(0.0, phase - TABLE_SCROLL_PAUSE) * TABLE_SCROLL_SPEED
-    return int(min(float(overflow), travelled))
+    if duration and duration > 0:
+        travelled = overflow * min(1.0, max(0.0, phase) / duration)
+    else:
+        travelled = max(0.0, phase) * TABLE_SCROLL_SPEED
+    return int(min(float(overflow), round(travelled)))
 
 
 def render_standings(
@@ -897,19 +908,18 @@ def render_standings(
     """
     canvas = new_canvas(context.width, context.height)
     draw = ImageDraw.Draw(canvas)
-    fonts = context.fonts
-    tiny = fonts.get("tiny")
-
-    heading = title or group.name or group.league.upper()
-    tiny.draw(draw, (2, 0), tiny.fit(heading, context.width - 26), BRIGHT)
-    tiny.draw_right(draw, context.width - 2, 0, group.league.upper(), DIM)
-    _hline(draw, 0, context.width - 1, TABLE_HEADER_HEIGHT - 1, FAINT)
+    _draw_table_header(draw, context, title or group.name or group.league.upper(),
+                       group.league)
+    if fits_as_columns(group, context.width):
+        _draw_division_columns(canvas, draw, context, group)
+        _draw_stale_marker(draw, context)
+        return canvas
 
     view_top = TABLE_HEADER_HEIGHT
     view_height = context.height - view_top
     content_height = max(view_height, len(group.rows) * TABLE_ROW_HEIGHT)
     offset = table_scroll_offset(context.phase, len(group.rows) * TABLE_ROW_HEIGHT,
-                                 view_height)
+                                 view_height, context.duration)
 
     # Draw the whole table into its own image and paste the visible window.
     # Clipping by arithmetic alone lets a half-scrolled row paint its text
@@ -927,6 +937,74 @@ def render_standings(
 
     _draw_stale_marker(draw, context)
     return canvas
+
+
+def fits_as_columns(group: StandingsGroup, width: int) -> bool:
+    """True when every team in the table can be on screen side by side."""
+    return 2 <= len(group.rows) <= width // DIVISION_COLUMN_MIN
+
+
+def _draw_table_header(draw: ImageDraw.ImageDraw, context: RenderContext,
+                       heading: str, league: str) -> None:
+    tiny = context.fonts.get("tiny")
+    tiny.draw(draw, (2, 0), tiny.fit(heading, context.width - 26), BRIGHT)
+    tiny.draw_right(draw, context.width - 2, 0, league.upper(), DIM)
+    _hline(draw, 0, context.width - 1, TABLE_HEADER_HEIGHT - 1, FAINT)
+
+
+def _draw_division_columns(
+    canvas: Image.Image,
+    draw: ImageDraw.ImageDraw,
+    context: RenderContext,
+    group: StandingsGroup,
+) -> None:
+    """A whole division at once: one column per team, leader on the left.
+
+    Each column is the crest with the abbreviation and position beside it,
+    and the record underneath. Nothing scrolls, so the race reads at a
+    glance -- and it reads without colour, because order and numbers
+    carry it.
+    """
+    fonts = context.fonts
+    tiny = fonts.get("tiny")
+    count = len(group.rows)
+    column = context.width // count
+    spare = context.width - column * count
+    body_top = TABLE_HEADER_HEIGHT + 1
+
+    for index, row in enumerate(group.rows):
+        x0 = spare // 2 + index * column
+        x1 = x0 + column - 1
+        if index:
+            _vline(draw, x0, body_top + 1, context.height - 2, FAINT)
+
+        record = row.record or row.primary_value
+        record_font = fit_font(fonts, ("small", "tiny"), record, column - 3)
+        record_y = context.height - record_font.height
+        eliminated = (row.note or "").lower().startswith("eliminated")
+        record_font.draw_centered(draw, (x0 + x1 + 1) // 2, record_y,
+                                  record_font.fit(record, column - 3),
+                                  DIM if eliminated else BRIGHT)
+
+        team = _row_as_team(row)
+        label = row.abbreviation[:4]
+        logo_size = max(8, min(record_y - body_top - 1, column - tiny.text_width(label) - 6))
+        box = (x0 + 2, body_top, x0 + 1 + logo_size, body_top + logo_size - 1)
+        text_x = box[2] + 2
+        if paste_logo(canvas, context, team, box):
+            tiny.draw(draw, (text_x, body_top + 1), tiny.fit(label, x1 - text_x), BRIGHT)
+            rank_y = body_top + tiny.height + 3
+        else:
+            # No crest: the abbreviation becomes the mark, large, with the
+            # team colour under it -- the same fallback the game screens use.
+            box = (x0 + 2, body_top, x1 - 6, record_y - 2)
+            draw_team_mark(canvas, draw, context, team, box)
+            text_x, rank_y = x1 - 4, body_top + 1
+        tiny.draw(draw, (text_x, rank_y), str(row.rank or index + 1), DIM)
+        stripe = zone_color(row.note, row.note_color)
+        if stripe:
+            # The same zone cue the scrolling table gives down its edge.
+            _hline(draw, text_x, text_x + 3, rank_y + tiny.height + 1, stripe)
 
 
 def _draw_standings_row(

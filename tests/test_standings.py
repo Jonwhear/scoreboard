@@ -46,6 +46,40 @@ def test_conference_children_become_separate_tables(nfl_groups):
     assert [row.abbreviation for row in nfl_groups[0].rows] == ["BUF", "KC"]
 
 
+@pytest.fixture
+def nfl_divisions(provider):
+    return provider.parse_standings(
+        "nfl", load_fixture("espn_nfl_division_standings.json"))
+
+
+def test_divisions_inside_conferences_become_eight_tables(nfl_divisions):
+    assert [group.name for group in nfl_divisions] == [
+        "AFC East", "AFC North", "AFC South", "AFC West",
+        "NFC East", "NFC North", "NFC South", "NFC West"]
+    assert all(len(group.rows) == 4 for group in nfl_divisions)
+
+
+def test_a_division_is_ordered_by_seed_and_ranked_within_itself(nfl_divisions):
+    north = next(group for group in nfl_divisions if group.name == "NFC North")
+    assert [row.abbreviation for row in north.rows] == ["DET", "MIN", "GB", "CHI"]
+    assert [row.rank for row in north.rows] == [1, 2, 3, 4], \
+        "conference seeds would read 1, 5, 6, 8 beside a four-team division"
+
+
+def test_clinch_letters_become_notes(nfl_divisions):
+    rows = {row.abbreviation: row for group in nfl_divisions for row in group.rows}
+    assert rows["KC"].note == "Clinched first-round bye"
+    assert rows["NYJ"].note == "Eliminated"
+    assert rows["DET"].note is None
+
+
+def test_the_nfl_asks_espn_for_divisions():
+    from scoreboard.providers.espn import ESPN_LEAGUES
+
+    assert ESPN_LEAGUES["nfl"].standings_params == {"level": 3}
+    assert not ESPN_LEAGUES["epl"].standings_params
+
+
 def test_soccer_shows_draws_and_us_leagues_do_not(epl_group, nfl_groups):
     assert epl_group.rows[1].record == "6-0-2", "soccer always shows draws"
     assert nfl_groups[0].rows[0].record == "5-1", "a 0-tie NFL record is W-L"
@@ -170,17 +204,38 @@ def test_a_short_table_does_not_scroll():
     assert table_scroll_offset(99.0, 16, 25) == 0
 
 
-def test_a_long_table_pauses_then_scrolls_then_stops():
-    content, view = 160, 25
-    assert table_scroll_offset(0.0, content, view) == 0
-    assert table_scroll_offset(1.0, content, view) == 0, "pauses so the top is readable"
-    middle = table_scroll_offset(8.0, content, view)
-    assert 0 < middle < content - view
-    assert table_scroll_offset(999.0, content, view) == content - view, "holds at the end"
+def test_a_long_table_scrolls_at_one_speed_for_the_whole_screen():
+    content, view, duration = 160, 25, 30.0
+    overflow = content - view
+    assert table_scroll_offset(0.0, content, view, duration) == 0
+    assert table_scroll_offset(1.0, content, view, duration) > 0, "no pause at the start"
+    assert table_scroll_offset(15.0, content, view, duration) == round(overflow / 2)
+    assert table_scroll_offset(30.0, content, view, duration) == overflow, \
+        "the last row arrives exactly as the screen ends"
+    assert table_scroll_offset(99.0, content, view, duration) == overflow
+
+
+def test_scroll_speed_is_constant():
+    """Equal slices of time cover equal distances -- no easing, no pauses."""
+    content, view, duration = 160, 25, 30.0
+    steps = [table_scroll_offset(t * 3.0, content, view, duration) for t in range(11)]
+    deltas = [later - earlier for earlier, later in zip(steps, steps[1:])]
+    assert max(deltas) - min(deltas) <= 1, deltas
+
+
+def test_a_longer_hold_scrolls_more_slowly():
+    assert (table_scroll_offset(5.0, 160, 25, 60.0)
+            < table_scroll_offset(5.0, 160, 25, 20.0))
+
+
+def test_without_a_duration_the_table_still_scrolls_steadily():
+    assert table_scroll_offset(0.0, 160, 25) == 0
+    assert table_scroll_offset(2.0, 160, 25) > 0
+    assert table_scroll_offset(999.0, 160, 25) == 135
 
 
 def test_scrolling_is_monotonic():
-    offsets = [table_scroll_offset(phase / 2, 200, 25) for phase in range(60)]
+    offsets = [table_scroll_offset(phase / 2, 200, 25, 20.0) for phase in range(60)]
     assert offsets == sorted(offsets)
 
 
@@ -291,3 +346,105 @@ def test_a_locked_game_still_beats_the_tables(epl_group):
     config = make_config(show_standings=True, locked_game=games[0].key)
     playlist = build_playlist(games, config, standings=tables)
     assert len(playlist) == 1 and playlist[0].kind is ScreenKind.LOCKED
+
+
+def test_the_second_table_survives_a_playlist_rebuild(epl_group):
+    """Every table used to share one screen key, so the 2-second playlist
+    rebuild sent the rotator back to the first table: the EFL Championship
+    appeared for a moment and then snapped back to the Premier League."""
+    from scoreboard.rotation import Rotator
+    from scoreboard.models import StandingsGroup
+
+    efl_group = StandingsGroup("efl_championship", "English League Championship",
+                               list(epl_group.rows))
+    tables = {"epl": Standings(league="epl", groups=[epl_group]),
+              "efl_championship": Standings(league="efl_championship",
+                                            groups=[efl_group])}
+    config = Config.from_dict({
+        "sports": {"enabled_leagues": ["epl", "efl_championship"]},
+        "rotation": {"show_standings": True},
+    })
+    rotator = Rotator()
+    rotator.set_playlist(build_playlist([], config, standings=tables))
+    rotator.tick(0.0)
+    rotator.advance(1.0)
+    assert rotator.current().title == "English League Championship"
+
+    rotator.set_playlist(build_playlist([], config, standings=tables))
+    assert rotator.current().title == "English League Championship"
+
+
+class RecordingClient:
+    """Answers every request with one payload and remembers what was asked."""
+
+    def __init__(self, payload):
+        self.payload = payload
+        self.calls = []
+
+    def get_json(self, url, params=None, cache_key=None, allow_stale=True):
+        from datetime import datetime, timezone
+        from scoreboard.httpclient import FetchResult
+
+        self.calls.append((url, params))
+        return FetchResult(data=self.payload, fetched_at=datetime.now(timezone.utc))
+
+
+def test_fetching_nfl_standings_requests_the_division_level():
+    client = RecordingClient(load_fixture("espn_nfl_division_standings.json"))
+    table = EspnProvider(client=client).fetch_standings("nfl")
+    url, params = client.calls[0]
+    assert url.endswith("/football/nfl/standings") and params == {"level": 3}
+    assert len(table.groups) == 8 and table.row_count == 32
+
+
+# -- divisions -------------------------------------------------------------
+
+def test_a_division_is_on_screen_all_at_once(fonts, nfl_divisions):
+    north = nfl_divisions[5]
+    frames = set()
+    for phase in (0.0, 10.0, 29.0):
+        context = RenderContext(fonts=fonts, logos=None, show_logos=False,
+                                width=128, height=32, phase=phase, duration=30.0)
+        frames.add(layouts.render_standings(north, context).tobytes())
+    assert len(frames) == 1, "four teams fit side by side, so nothing scrolls"
+
+
+@pytest.mark.parametrize("teams,width,columns", [
+    (4, 128, True), (5, 128, False), (6, 192, True), (20, 192, False), (1, 128, False)])
+def test_only_tables_that_fit_become_columns(teams, width, columns):
+    from scoreboard.models import StandingsRow
+
+    group = StandingsGroup("nfl", "X", [
+        StandingsRow("nfl", str(n), f"T{n}", f"Team {n}") for n in range(teams)])
+    assert layouts.fits_as_columns(group, width) is columns
+
+
+@pytest.mark.parametrize("chain", [1, 2, 3])
+def test_a_division_renders_at_every_chain_length(fonts, nfl_divisions, chain):
+    context = RenderContext(fonts=fonts, logos=None, show_logos=False,
+                            width=64 * chain, height=32)
+    assert layouts.render_standings(nfl_divisions[0], context).size == (64 * chain, 32)
+
+
+def test_every_division_gets_its_own_screen(nfl_divisions):
+    tables = {"nfl": Standings(league="nfl", groups=nfl_divisions)}
+    config = Config.from_dict({"sports": {"enabled_leagues": ["nfl"]},
+                               "rotation": {"show_standings": True, "max_screens": 20}})
+    screens = [s for s in build_playlist([], config, standings=tables)
+               if s.kind is ScreenKind.STANDINGS]
+    assert len(screens) == 8
+    assert len({screen.key for screen in screens}) == 8
+
+
+def test_your_teams_division_comes_first(nfl_divisions):
+    tables = {"nfl": Standings(league="nfl", groups=nfl_divisions)}
+    config = Config.from_dict({
+        "sports": {"enabled_leagues": ["nfl"],
+                   "favorite_teams": [{"league": "nfl", "team_id": "8",
+                                       "abbreviation": "DET"}]},
+        "rotation": {"show_standings": True, "max_screens": 20}})
+    titles = [s.title for s in build_playlist([], config, standings=tables)
+              if s.kind is ScreenKind.STANDINGS]
+    assert titles[0] == "NFC North"
+    assert titles[1:] == ["AFC East", "AFC North", "AFC South", "AFC West",
+                          "NFC East", "NFC South", "NFC West"]

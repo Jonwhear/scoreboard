@@ -140,7 +140,8 @@ class DisplayRunner(threading.Thread):
 
     # -- rendering --------------------------------------------------------
 
-    def _context(self, config, phase: float = 0.0) -> RenderContext:
+    def _context(self, config, phase: float = 0.0,
+                 duration: Optional[float] = None) -> RenderContext:
         return RenderContext(
             fonts=self.fonts,
             logos=self.logos,
@@ -149,6 +150,7 @@ class DisplayRunner(threading.Thread):
             width=config.display.width,
             height=config.display.height,
             phase=phase,
+            duration=duration,
         )
 
     def _render_rotation(
@@ -169,7 +171,8 @@ class DisplayRunner(threading.Thread):
             self._rotator.advance(monotonic_now)
 
         screen = self._rotator.tick(monotonic_now)
-        context = self._context(config, phase=self._rotator.phase(monotonic_now))
+        context = self._context(config, phase=self._rotator.phase(monotonic_now),
+                                duration=self._rotator.current_duration())
         image = render_screen(
             screen,
             context,

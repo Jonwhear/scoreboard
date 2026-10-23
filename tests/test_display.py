@@ -511,3 +511,32 @@ def test_blit_cost_is_reported_once(caplog):
             display.show(_frame(display, value * 10))
     reports = [r for r in caplog.records if "First frame pushed" in r.message]
     assert len(reports) == 1
+
+
+def test_the_runner_tells_a_scrolling_layout_how_long_it_is_held(tmp_path, monkeypatch):
+    """Linear scrolling needs the screen's full duration, not just its phase."""
+    from scoreboard import runner as runner_module
+    from scoreboard.models import Standings, StandingsGroup, StandingsRow
+
+    group = StandingsGroup("epl", "Premier League", [
+        StandingsRow("epl", str(n), f"T{n}", f"Team {n}", rank=n, points=40 - n)
+        for n in range(1, 21)])
+
+    class Tables:
+        def get(self, league):
+            return Standings("epl", [group]) if league == "epl" else None
+
+    runner, _, _, _ = make_runner(tmp_path, {
+        "sports": {"enabled_leagues": ["epl"]},
+        "rotation": {"show_standings": True, "standings_seconds": 30},
+    })
+    runner.standings = Tables()
+    seen = []
+    real = runner_module.render_screen
+    monkeypatch.setattr(runner_module, "render_screen",
+                        lambda screen, context, **kw: seen.append(context) or real(
+                            screen, context, **kw))
+    runner._tick(100.0)
+    runner._tick(115.0)
+    assert [c.duration for c in seen] == [30.0, 30.0]
+    assert [c.phase for c in seen] == [0.0, 15.0]

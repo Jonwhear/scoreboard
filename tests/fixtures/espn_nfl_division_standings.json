@@ -1,0 +1,1340 @@
+{
+ "name": "National Football League",
+ "abbreviation": "NFL",
+ "children": [
+  {
+   "name": "American Football Conference",
+   "abbreviation": "AFC",
+   "children": [
+    {
+     "name": "AFC East",
+     "abbreviation": "East",
+     "standings": {
+      "entries": [
+       {
+        "team": {
+         "id": "20",
+         "abbreviation": "NYJ",
+         "displayName": "NYJ Team",
+         "logos": [
+          {
+           "href": "https://a.espncdn.com/i/teamlogos/nfl/500/nyj.png"
+          }
+         ]
+        },
+        "stats": [
+         {
+          "name": "wins",
+          "displayValue": "1",
+          "value": 1.0
+         },
+         {
+          "name": "losses",
+          "displayValue": "6",
+          "value": 6.0
+         },
+         {
+          "name": "ties",
+          "displayValue": "0",
+          "value": 0.0
+         },
+         {
+          "name": "playoffSeed",
+          "displayValue": "14",
+          "value": 14.0
+         },
+         {
+          "name": "gamesBehind",
+          "displayValue": "-",
+          "value": 0.0
+         },
+         {
+          "name": "clincher",
+          "displayValue": "e",
+          "value": 0.0
+         }
+        ]
+       },
+       {
+        "team": {
+         "id": "17",
+         "abbreviation": "NE",
+         "displayName": "NE Team",
+         "logos": [
+          {
+           "href": "https://a.espncdn.com/i/teamlogos/nfl/500/ne.png"
+          }
+         ]
+        },
+        "stats": [
+         {
+          "name": "wins",
+          "displayValue": "3",
+          "value": 3.0
+         },
+         {
+          "name": "losses",
+          "displayValue": "4",
+          "value": 4.0
+         },
+         {
+          "name": "ties",
+          "displayValue": "0",
+          "value": 0.0
+         },
+         {
+          "name": "playoffSeed",
+          "displayValue": "10",
+          "value": 10.0
+         },
+         {
+          "name": "gamesBehind",
+          "displayValue": "-",
+          "value": 0.0
+         }
+        ]
+       },
+       {
+        "team": {
+         "id": "15",
+         "abbreviation": "MIA",
+         "displayName": "MIA Team",
+         "logos": [
+          {
+           "href": "https://a.espncdn.com/i/teamlogos/nfl/500/mia.png"
+          }
+         ]
+        },
+        "stats": [
+         {
+          "name": "wins",
+          "displayValue": "4",
+          "value": 4.0
+         },
+         {
+          "name": "losses",
+          "displayValue": "3",
+          "value": 3.0
+         },
+         {
+          "name": "ties",
+          "displayValue": "0",
+          "value": 0.0
+         },
+         {
+          "name": "playoffSeed",
+          "displayValue": "6",
+          "value": 6.0
+         },
+         {
+          "name": "gamesBehind",
+          "displayValue": "-",
+          "value": 0.0
+         }
+        ]
+       },
+       {
+        "team": {
+         "id": "2",
+         "abbreviation": "BUF",
+         "displayName": "BUF Team",
+         "logos": [
+          {
+           "href": "https://a.espncdn.com/i/teamlogos/nfl/500/buf.png"
+          }
+         ]
+        },
+        "stats": [
+         {
+          "name": "wins",
+          "displayValue": "6",
+          "value": 6.0
+         },
+         {
+          "name": "losses",
+          "displayValue": "1",
+          "value": 1.0
+         },
+         {
+          "name": "ties",
+          "displayValue": "0",
+          "value": 0.0
+         },
+         {
+          "name": "playoffSeed",
+          "displayValue": "2",
+          "value": 2.0
+         },
+         {
+          "name": "gamesBehind",
+          "displayValue": "-",
+          "value": 0.0
+         }
+        ]
+       }
+      ]
+     }
+    },
+    {
+     "name": "AFC North",
+     "abbreviation": "North",
+     "standings": {
+      "entries": [
+       {
+        "team": {
+         "id": "5",
+         "abbreviation": "CLE",
+         "displayName": "CLE Team",
+         "logos": [
+          {
+           "href": "https://a.espncdn.com/i/teamlogos/nfl/500/cle.png"
+          }
+         ]
+        },
+        "stats": [
+         {
+          "name": "wins",
+          "displayValue": "1",
+          "value": 1.0
+         },
+         {
+          "name": "losses",
+          "displayValue": "6",
+          "value": 6.0
+         },
+         {
+          "name": "ties",
+          "displayValue": "0",
+          "value": 0.0
+         },
+         {
+          "name": "playoffSeed",
+          "displayValue": "15",
+          "value": 15.0
+         },
+         {
+          "name": "gamesBehind",
+          "displayValue": "-",
+          "value": 0.0
+         }
+        ]
+       },
+       {
+        "team": {
+         "id": "4",
+         "abbreviation": "CIN",
+         "displayName": "CIN Team",
+         "logos": [
+          {
+           "href": "https://a.espncdn.com/i/teamlogos/nfl/500/cin.png"
+          }
+         ]
+        },
+        "stats": [
+         {
+          "name": "wins",
+          "displayValue": "3",
+          "value": 3.0
+         },
+         {
+          "name": "losses",
+          "displayValue": "4",
+          "value": 4.0
+         },
+         {
+          "name": "ties",
+          "displayValue": "0",
+          "value": 0.0
+         },
+         {
+          "name": "playoffSeed",
+          "displayValue": "11",
+          "value": 11.0
+         },
+         {
+          "name": "gamesBehind",
+          "displayValue": "-",
+          "value": 0.0
+         }
+        ]
+       },
+       {
+        "team": {
+         "id": "23",
+         "abbreviation": "PIT",
+         "displayName": "PIT Team",
+         "logos": [
+          {
+           "href": "https://a.espncdn.com/i/teamlogos/nfl/500/pit.png"
+          }
+         ]
+        },
+        "stats": [
+         {
+          "name": "wins",
+          "displayValue": "5",
+          "value": 5.0
+         },
+         {
+          "name": "losses",
+          "displayValue": "2",
+          "value": 2.0
+         },
+         {
+          "name": "ties",
+          "displayValue": "0",
+          "value": 0.0
+         },
+         {
+          "name": "playoffSeed",
+          "displayValue": "5",
+          "value": 5.0
+         },
+         {
+          "name": "gamesBehind",
+          "displayValue": "-",
+          "value": 0.0
+         }
+        ]
+       },
+       {
+        "team": {
+         "id": "33",
+         "abbreviation": "BAL",
+         "displayName": "BAL Team",
+         "logos": [
+          {
+           "href": "https://a.espncdn.com/i/teamlogos/nfl/500/bal.png"
+          }
+         ]
+        },
+        "stats": [
+         {
+          "name": "wins",
+          "displayValue": "5",
+          "value": 5.0
+         },
+         {
+          "name": "losses",
+          "displayValue": "2",
+          "value": 2.0
+         },
+         {
+          "name": "ties",
+          "displayValue": "0",
+          "value": 0.0
+         },
+         {
+          "name": "playoffSeed",
+          "displayValue": "3",
+          "value": 3.0
+         },
+         {
+          "name": "gamesBehind",
+          "displayValue": "-",
+          "value": 0.0
+         }
+        ]
+       }
+      ]
+     }
+    },
+    {
+     "name": "AFC South",
+     "abbreviation": "South",
+     "standings": {
+      "entries": [
+       {
+        "team": {
+         "id": "10",
+         "abbreviation": "TEN",
+         "displayName": "TEN Team",
+         "logos": [
+          {
+           "href": "https://a.espncdn.com/i/teamlogos/nfl/500/ten.png"
+          }
+         ]
+        },
+        "stats": [
+         {
+          "name": "wins",
+          "displayValue": "1",
+          "value": 1.0
+         },
+         {
+          "name": "losses",
+          "displayValue": "6",
+          "value": 6.0
+         },
+         {
+          "name": "ties",
+          "displayValue": "0",
+          "value": 0.0
+         },
+         {
+          "name": "playoffSeed",
+          "displayValue": "16",
+          "value": 16.0
+         },
+         {
+          "name": "gamesBehind",
+          "displayValue": "-",
+          "value": 0.0
+         }
+        ]
+       },
+       {
+        "team": {
+         "id": "30",
+         "abbreviation": "JAX",
+         "displayName": "JAX Team",
+         "logos": [
+          {
+           "href": "https://a.espncdn.com/i/teamlogos/nfl/500/jax.png"
+          }
+         ]
+        },
+        "stats": [
+         {
+          "name": "wins",
+          "displayValue": "2",
+          "value": 2.0
+         },
+         {
+          "name": "losses",
+          "displayValue": "5",
+          "value": 5.0
+         },
+         {
+          "name": "ties",
+          "displayValue": "0",
+          "value": 0.0
+         },
+         {
+          "name": "playoffSeed",
+          "displayValue": "12",
+          "value": 12.0
+         },
+         {
+          "name": "gamesBehind",
+          "displayValue": "-",
+          "value": 0.0
+         }
+        ]
+       },
+       {
+        "team": {
+         "id": "11",
+         "abbreviation": "IND",
+         "displayName": "IND Team",
+         "logos": [
+          {
+           "href": "https://a.espncdn.com/i/teamlogos/nfl/500/ind.png"
+          }
+         ]
+        },
+        "stats": [
+         {
+          "name": "wins",
+          "displayValue": "4",
+          "value": 4.0
+         },
+         {
+          "name": "losses",
+          "displayValue": "3",
+          "value": 3.0
+         },
+         {
+          "name": "ties",
+          "displayValue": "0",
+          "value": 0.0
+         },
+         {
+          "name": "playoffSeed",
+          "displayValue": "7",
+          "value": 7.0
+         },
+         {
+          "name": "gamesBehind",
+          "displayValue": "-",
+          "value": 0.0
+         }
+        ]
+       },
+       {
+        "team": {
+         "id": "34",
+         "abbreviation": "HOU",
+         "displayName": "HOU Team",
+         "logos": [
+          {
+           "href": "https://a.espncdn.com/i/teamlogos/nfl/500/hou.png"
+          }
+         ]
+        },
+        "stats": [
+         {
+          "name": "wins",
+          "displayValue": "5",
+          "value": 5.0
+         },
+         {
+          "name": "losses",
+          "displayValue": "2",
+          "value": 2.0
+         },
+         {
+          "name": "ties",
+          "displayValue": "0",
+          "value": 0.0
+         },
+         {
+          "name": "playoffSeed",
+          "displayValue": "4",
+          "value": 4.0
+         },
+         {
+          "name": "gamesBehind",
+          "displayValue": "-",
+          "value": 0.0
+         }
+        ]
+       }
+      ]
+     }
+    },
+    {
+     "name": "AFC West",
+     "abbreviation": "West",
+     "standings": {
+      "entries": [
+       {
+        "team": {
+         "id": "13",
+         "abbreviation": "LV",
+         "displayName": "LV Team",
+         "logos": [
+          {
+           "href": "https://a.espncdn.com/i/teamlogos/nfl/500/lv.png"
+          }
+         ]
+        },
+        "stats": [
+         {
+          "name": "wins",
+          "displayValue": "2",
+          "value": 2.0
+         },
+         {
+          "name": "losses",
+          "displayValue": "5",
+          "value": 5.0
+         },
+         {
+          "name": "ties",
+          "displayValue": "0",
+          "value": 0.0
+         },
+         {
+          "name": "playoffSeed",
+          "displayValue": "13",
+          "value": 13.0
+         },
+         {
+          "name": "gamesBehind",
+          "displayValue": "-",
+          "value": 0.0
+         }
+        ]
+       },
+       {
+        "team": {
+         "id": "7",
+         "abbreviation": "DEN",
+         "displayName": "DEN Team",
+         "logos": [
+          {
+           "href": "https://a.espncdn.com/i/teamlogos/nfl/500/den.png"
+          }
+         ]
+        },
+        "stats": [
+         {
+          "name": "wins",
+          "displayValue": "4",
+          "value": 4.0
+         },
+         {
+          "name": "losses",
+          "displayValue": "3",
+          "value": 3.0
+         },
+         {
+          "name": "ties",
+          "displayValue": "0",
+          "value": 0.0
+         },
+         {
+          "name": "playoffSeed",
+          "displayValue": "9",
+          "value": 9.0
+         },
+         {
+          "name": "gamesBehind",
+          "displayValue": "-",
+          "value": 0.0
+         }
+        ]
+       },
+       {
+        "team": {
+         "id": "24",
+         "abbreviation": "LAC",
+         "displayName": "LAC Team",
+         "logos": [
+          {
+           "href": "https://a.espncdn.com/i/teamlogos/nfl/500/lac.png"
+          }
+         ]
+        },
+        "stats": [
+         {
+          "name": "wins",
+          "displayValue": "4",
+          "value": 4.0
+         },
+         {
+          "name": "losses",
+          "displayValue": "3",
+          "value": 3.0
+         },
+         {
+          "name": "ties",
+          "displayValue": "0",
+          "value": 0.0
+         },
+         {
+          "name": "playoffSeed",
+          "displayValue": "8",
+          "value": 8.0
+         },
+         {
+          "name": "gamesBehind",
+          "displayValue": "-",
+          "value": 0.0
+         }
+        ]
+       },
+       {
+        "team": {
+         "id": "12",
+         "abbreviation": "KC",
+         "displayName": "KC Team",
+         "logos": [
+          {
+           "href": "https://a.espncdn.com/i/teamlogos/nfl/500/kc.png"
+          }
+         ]
+        },
+        "stats": [
+         {
+          "name": "wins",
+          "displayValue": "7",
+          "value": 7.0
+         },
+         {
+          "name": "losses",
+          "displayValue": "0",
+          "value": 0.0
+         },
+         {
+          "name": "ties",
+          "displayValue": "0",
+          "value": 0.0
+         },
+         {
+          "name": "playoffSeed",
+          "displayValue": "1",
+          "value": 1.0
+         },
+         {
+          "name": "gamesBehind",
+          "displayValue": "-",
+          "value": 0.0
+         },
+         {
+          "name": "clincher",
+          "displayValue": "z",
+          "value": 0.0
+         }
+        ]
+       }
+      ]
+     }
+    }
+   ]
+  },
+  {
+   "name": "National Football Conference",
+   "abbreviation": "NFC",
+   "children": [
+    {
+     "name": "NFC East",
+     "abbreviation": "East",
+     "standings": {
+      "entries": [
+       {
+        "team": {
+         "id": "19",
+         "abbreviation": "NYG",
+         "displayName": "NYG Team",
+         "logos": [
+          {
+           "href": "https://a.espncdn.com/i/teamlogos/nfl/500/nyg.png"
+          }
+         ]
+        },
+        "stats": [
+         {
+          "name": "wins",
+          "displayValue": "2",
+          "value": 2.0
+         },
+         {
+          "name": "losses",
+          "displayValue": "5",
+          "value": 5.0
+         },
+         {
+          "name": "ties",
+          "displayValue": "0",
+          "value": 0.0
+         },
+         {
+          "name": "playoffSeed",
+          "displayValue": "14",
+          "value": 14.0
+         },
+         {
+          "name": "gamesBehind",
+          "displayValue": "-",
+          "value": 0.0
+         }
+        ]
+       },
+       {
+        "team": {
+         "id": "6",
+         "abbreviation": "DAL",
+         "displayName": "DAL Team",
+         "logos": [
+          {
+           "href": "https://a.espncdn.com/i/teamlogos/nfl/500/dal.png"
+          }
+         ]
+        },
+        "stats": [
+         {
+          "name": "wins",
+          "displayValue": "3",
+          "value": 3.0
+         },
+         {
+          "name": "losses",
+          "displayValue": "4",
+          "value": 4.0
+         },
+         {
+          "name": "ties",
+          "displayValue": "0",
+          "value": 0.0
+         },
+         {
+          "name": "playoffSeed",
+          "displayValue": "10",
+          "value": 10.0
+         },
+         {
+          "name": "gamesBehind",
+          "displayValue": "-",
+          "value": 0.0
+         }
+        ]
+       },
+       {
+        "team": {
+         "id": "28",
+         "abbreviation": "WSH",
+         "displayName": "WSH Team",
+         "logos": [
+          {
+           "href": "https://a.espncdn.com/i/teamlogos/nfl/500/wsh.png"
+          }
+         ]
+        },
+        "stats": [
+         {
+          "name": "wins",
+          "displayValue": "5",
+          "value": 5.0
+         },
+         {
+          "name": "losses",
+          "displayValue": "2",
+          "value": 2.0
+         },
+         {
+          "name": "ties",
+          "displayValue": "0",
+          "value": 0.0
+         },
+         {
+          "name": "playoffSeed",
+          "displayValue": "5",
+          "value": 5.0
+         },
+         {
+          "name": "gamesBehind",
+          "displayValue": "-",
+          "value": 0.0
+         }
+        ]
+       },
+       {
+        "team": {
+         "id": "21",
+         "abbreviation": "PHI",
+         "displayName": "PHI Team",
+         "logos": [
+          {
+           "href": "https://a.espncdn.com/i/teamlogos/nfl/500/phi.png"
+          }
+         ]
+        },
+        "stats": [
+         {
+          "name": "wins",
+          "displayValue": "5",
+          "value": 5.0
+         },
+         {
+          "name": "losses",
+          "displayValue": "2",
+          "value": 2.0
+         },
+         {
+          "name": "ties",
+          "displayValue": "0",
+          "value": 0.0
+         },
+         {
+          "name": "playoffSeed",
+          "displayValue": "2",
+          "value": 2.0
+         },
+         {
+          "name": "gamesBehind",
+          "displayValue": "-",
+          "value": 0.0
+         }
+        ]
+       }
+      ]
+     }
+    },
+    {
+     "name": "NFC North",
+     "abbreviation": "North",
+     "standings": {
+      "entries": [
+       {
+        "team": {
+         "id": "3",
+         "abbreviation": "CHI",
+         "displayName": "CHI Team",
+         "logos": [
+          {
+           "href": "https://a.espncdn.com/i/teamlogos/nfl/500/chi.png"
+          }
+         ]
+        },
+        "stats": [
+         {
+          "name": "wins",
+          "displayValue": "4",
+          "value": 4.0
+         },
+         {
+          "name": "losses",
+          "displayValue": "3",
+          "value": 3.0
+         },
+         {
+          "name": "ties",
+          "displayValue": "0",
+          "value": 0.0
+         },
+         {
+          "name": "playoffSeed",
+          "displayValue": "8",
+          "value": 8.0
+         },
+         {
+          "name": "gamesBehind",
+          "displayValue": "-",
+          "value": 0.0
+         }
+        ]
+       },
+       {
+        "team": {
+         "id": "9",
+         "abbreviation": "GB",
+         "displayName": "GB Team",
+         "logos": [
+          {
+           "href": "https://a.espncdn.com/i/teamlogos/nfl/500/gb.png"
+          }
+         ]
+        },
+        "stats": [
+         {
+          "name": "wins",
+          "displayValue": "5",
+          "value": 5.0
+         },
+         {
+          "name": "losses",
+          "displayValue": "2",
+          "value": 2.0
+         },
+         {
+          "name": "ties",
+          "displayValue": "0",
+          "value": 0.0
+         },
+         {
+          "name": "playoffSeed",
+          "displayValue": "7",
+          "value": 7.0
+         },
+         {
+          "name": "gamesBehind",
+          "displayValue": "-",
+          "value": 0.0
+         }
+        ]
+       },
+       {
+        "team": {
+         "id": "16",
+         "abbreviation": "MIN",
+         "displayName": "MIN Team",
+         "logos": [
+          {
+           "href": "https://a.espncdn.com/i/teamlogos/nfl/500/min.png"
+          }
+         ]
+        },
+        "stats": [
+         {
+          "name": "wins",
+          "displayValue": "5",
+          "value": 5.0
+         },
+         {
+          "name": "losses",
+          "displayValue": "2",
+          "value": 2.0
+         },
+         {
+          "name": "ties",
+          "displayValue": "0",
+          "value": 0.0
+         },
+         {
+          "name": "playoffSeed",
+          "displayValue": "6",
+          "value": 6.0
+         },
+         {
+          "name": "gamesBehind",
+          "displayValue": "-",
+          "value": 0.0
+         }
+        ]
+       },
+       {
+        "team": {
+         "id": "8",
+         "abbreviation": "DET",
+         "displayName": "DET Team",
+         "logos": [
+          {
+           "href": "https://a.espncdn.com/i/teamlogos/nfl/500/det.png"
+          }
+         ]
+        },
+        "stats": [
+         {
+          "name": "wins",
+          "displayValue": "6",
+          "value": 6.0
+         },
+         {
+          "name": "losses",
+          "displayValue": "1",
+          "value": 1.0
+         },
+         {
+          "name": "ties",
+          "displayValue": "0",
+          "value": 0.0
+         },
+         {
+          "name": "playoffSeed",
+          "displayValue": "1",
+          "value": 1.0
+         },
+         {
+          "name": "gamesBehind",
+          "displayValue": "-",
+          "value": 0.0
+         }
+        ]
+       }
+      ]
+     }
+    },
+    {
+     "name": "NFC South",
+     "abbreviation": "South",
+     "standings": {
+      "entries": [
+       {
+        "team": {
+         "id": "29",
+         "abbreviation": "CAR",
+         "displayName": "CAR Team",
+         "logos": [
+          {
+           "href": "https://a.espncdn.com/i/teamlogos/nfl/500/car.png"
+          }
+         ]
+        },
+        "stats": [
+         {
+          "name": "wins",
+          "displayValue": "1",
+          "value": 1.0
+         },
+         {
+          "name": "losses",
+          "displayValue": "6",
+          "value": 6.0
+         },
+         {
+          "name": "ties",
+          "displayValue": "0",
+          "value": 0.0
+         },
+         {
+          "name": "playoffSeed",
+          "displayValue": "16",
+          "value": 16.0
+         },
+         {
+          "name": "gamesBehind",
+          "displayValue": "-",
+          "value": 0.0
+         }
+        ]
+       },
+       {
+        "team": {
+         "id": "18",
+         "abbreviation": "NO",
+         "displayName": "NO Team",
+         "logos": [
+          {
+           "href": "https://a.espncdn.com/i/teamlogos/nfl/500/no.png"
+          }
+         ]
+        },
+        "stats": [
+         {
+          "name": "wins",
+          "displayValue": "2",
+          "value": 2.0
+         },
+         {
+          "name": "losses",
+          "displayValue": "5",
+          "value": 5.0
+         },
+         {
+          "name": "ties",
+          "displayValue": "0",
+          "value": 0.0
+         },
+         {
+          "name": "playoffSeed",
+          "displayValue": "15",
+          "value": 15.0
+         },
+         {
+          "name": "gamesBehind",
+          "displayValue": "-",
+          "value": 0.0
+         }
+        ]
+       },
+       {
+        "team": {
+         "id": "27",
+         "abbreviation": "TB",
+         "displayName": "TB Team",
+         "logos": [
+          {
+           "href": "https://a.espncdn.com/i/teamlogos/nfl/500/tb.png"
+          }
+         ]
+        },
+        "stats": [
+         {
+          "name": "wins",
+          "displayValue": "4",
+          "value": 4.0
+         },
+         {
+          "name": "losses",
+          "displayValue": "3",
+          "value": 3.0
+         },
+         {
+          "name": "ties",
+          "displayValue": "0",
+          "value": 0.0
+         },
+         {
+          "name": "playoffSeed",
+          "displayValue": "9",
+          "value": 9.0
+         },
+         {
+          "name": "gamesBehind",
+          "displayValue": "-",
+          "value": 0.0
+         }
+        ]
+       },
+       {
+        "team": {
+         "id": "1",
+         "abbreviation": "ATL",
+         "displayName": "ATL Team",
+         "logos": [
+          {
+           "href": "https://a.espncdn.com/i/teamlogos/nfl/500/atl.png"
+          }
+         ]
+        },
+        "stats": [
+         {
+          "name": "wins",
+          "displayValue": "4",
+          "value": 4.0
+         },
+         {
+          "name": "losses",
+          "displayValue": "3",
+          "value": 3.0
+         },
+         {
+          "name": "ties",
+          "displayValue": "0",
+          "value": 0.0
+         },
+         {
+          "name": "playoffSeed",
+          "displayValue": "3",
+          "value": 3.0
+         },
+         {
+          "name": "gamesBehind",
+          "displayValue": "-",
+          "value": 0.0
+         }
+        ]
+       }
+      ]
+     }
+    },
+    {
+     "name": "NFC West",
+     "abbreviation": "West",
+     "standings": {
+      "entries": [
+       {
+        "team": {
+         "id": "22",
+         "abbreviation": "ARI",
+         "displayName": "ARI Team",
+         "logos": [
+          {
+           "href": "https://a.espncdn.com/i/teamlogos/nfl/500/ari.png"
+          }
+         ]
+        },
+        "stats": [
+         {
+          "name": "wins",
+          "displayValue": "3",
+          "value": 3.0
+         },
+         {
+          "name": "losses",
+          "displayValue": "4",
+          "value": 4.0
+         },
+         {
+          "name": "ties",
+          "displayValue": "0",
+          "value": 0.0
+         },
+         {
+          "name": "playoffSeed",
+          "displayValue": "13",
+          "value": 13.0
+         },
+         {
+          "name": "gamesBehind",
+          "displayValue": "-",
+          "value": 0.0
+         }
+        ]
+       },
+       {
+        "team": {
+         "id": "25",
+         "abbreviation": "SF",
+         "displayName": "SF Team",
+         "logos": [
+          {
+           "href": "https://a.espncdn.com/i/teamlogos/nfl/500/sf.png"
+          }
+         ]
+        },
+        "stats": [
+         {
+          "name": "wins",
+          "displayValue": "3",
+          "value": 3.0
+         },
+         {
+          "name": "losses",
+          "displayValue": "4",
+          "value": 4.0
+         },
+         {
+          "name": "ties",
+          "displayValue": "0",
+          "value": 0.0
+         },
+         {
+          "name": "playoffSeed",
+          "displayValue": "12",
+          "value": 12.0
+         },
+         {
+          "name": "gamesBehind",
+          "displayValue": "-",
+          "value": 0.0
+         }
+        ]
+       },
+       {
+        "team": {
+         "id": "14",
+         "abbreviation": "LAR",
+         "displayName": "LAR Team",
+         "logos": [
+          {
+           "href": "https://a.espncdn.com/i/teamlogos/nfl/500/lar.png"
+          }
+         ]
+        },
+        "stats": [
+         {
+          "name": "wins",
+          "displayValue": "3",
+          "value": 3.0
+         },
+         {
+          "name": "losses",
+          "displayValue": "4",
+          "value": 4.0
+         },
+         {
+          "name": "ties",
+          "displayValue": "0",
+          "value": 0.0
+         },
+         {
+          "name": "playoffSeed",
+          "displayValue": "11",
+          "value": 11.0
+         },
+         {
+          "name": "gamesBehind",
+          "displayValue": "-",
+          "value": 0.0
+         }
+        ]
+       },
+       {
+        "team": {
+         "id": "26",
+         "abbreviation": "SEA",
+         "displayName": "SEA Team",
+         "logos": [
+          {
+           "href": "https://a.espncdn.com/i/teamlogos/nfl/500/sea.png"
+          }
+         ]
+        },
+        "stats": [
+         {
+          "name": "wins",
+          "displayValue": "4",
+          "value": 4.0
+         },
+         {
+          "name": "losses",
+          "displayValue": "3",
+          "value": 3.0
+         },
+         {
+          "name": "ties",
+          "displayValue": "0",
+          "value": 0.0
+         },
+         {
+          "name": "playoffSeed",
+          "displayValue": "4",
+          "value": 4.0
+         },
+         {
+          "name": "gamesBehind",
+          "displayValue": "-",
+          "value": 0.0
+         }
+        ]
+       }
+      ]
+     }
+    }
+   ]
+  }
+ ]
+}
