@@ -45,6 +45,7 @@ status gets a column of its own:
 - [The web UI](#the-web-ui)
 - [Following one game](#following-one-game)
 - [League tables](#league-tables)
+- [Favourite team schedules](#favourite-team-schedules)
 - [Configuration](#configuration)
 - [Upgrades keep your settings](#upgrades-keep-your-settings)
 - [systemd service](#systemd-service)
@@ -443,9 +444,11 @@ curl -s -X POST http://scoreboard.local:8080/api/lock \
 
 ## League tables
 
-Layout F. One table per league, drawn across the whole canvas and scrolling
-vertically while the screen is held — a pause at the top, a steady scroll, a
-pause at the bottom.
+Layout F. One table per league (or per division), drawn across the whole
+canvas. A long table scrolls vertically at **one constant speed for the whole
+time it is on screen**: it starts moving straight away, never pauses, and the
+last row arrives just as the screen ends. A longer hold is simply a slower
+scroll.
 
 ```
 ┌───────────────────────────────────────┐
@@ -472,10 +475,69 @@ pause at the bottom.
 * Tables are cached on disk in `var/` and refreshed in the background at most
   every 30 minutes; a failed refresh is retried after 10 minutes and the
   previous table keeps being shown. They cost nothing while they are off.
+* **The NFL is shown by division**, not by conference — AFC/NFC only matters
+  for playoff seeding. A table short enough for every team to sit side by
+  side (four teams on two panels, six on three) is drawn all at once instead
+  of scrolled: one column per team, leader on the left, each with its crest,
+  abbreviation, position and record.
+
+  ```
+  ┌───────────────────────────────────────┐
+  │ NFC North                         NFL │
+  ├─────────┬─────────┬─────────┬─────────┤
+  │[■] DET  │[■] MIN  │[■] GB   │[■] CHI  │
+  │[■] 1    │[■] 2    │[■] 3    │[■] 4    │
+  │   6-1   │   5-2   │   5-2   │   4-3   │
+  └─────────┴─────────┴─────────┴─────────┘
+  ```
+
+  All eight divisions get a screen, held for the same seconds-per-table as
+  any other table. The division containing one of your favourite teams comes
+  first. Late in the season ESPN's clinch letters become the same zone
+  marks a soccer table uses, and an eliminated team's record is dimmed.
 * Tables sort *after* games in the rotation — they are reference material, not
-  news — so a live favourite is never pushed aside by a table.
+  news — so a live favourite is never pushed aside by a table. Eight
+  divisions plus a couple of soccer tables is a long rotation: raise **Most
+  screens per rotation** in the web UI if tables are being trimmed off the
+  end on a busy day.
 * `GET /api/standings` returns whatever is cached, which is also what the web
   UI renders.
+
+---
+
+## Favourite team schedules
+
+Layout G. A screen for each favourite team, listing its next games — on by
+default, switched off or resized under **Favourite team schedules** in the
+web UI.
+
+```
+┌───────┬───────────────────────────────┐
+│       │ SUN 11/2     [■] MIN    1:00P │
+│ crest │ SUN 11/9   @ [■] DAL    1:00P │
+│       │ SUN 11/16  @ [■] GB     4:25P │
+│  DET  │ SUN 11/23    [■] CHI    1:00P │
+└───────┴───────────────────────────────┘
+```
+
+* Each row is date, opponent and local start time. `@` marks an away game,
+  as a printed schedule does. A game today reads `TODAY`; one in progress
+  reads `LIVE` with the score in place of the start time. On three panels
+  the TV channel fits too.
+* **Games to list** (`rotation.schedule_games`, 1–10, default 4). Four fit
+  on two panels at once; more scroll past at the same steady speed as a
+  table.
+* Only favourite teams get one, and only while their league is enabled.
+  The screens sit right after your teams' own live, upcoming and final
+  screens and ahead of everyone else's games, so a busy slate does not trim
+  them away.
+* The schedule comes from ESPN's per-team schedule (fixtures, for soccer),
+  fetched in the background when a favourite is added and every three hours
+  after. It is merged with the live scoreboard, so tonight's game turns live
+  the moment it starts. A team with nothing scheduled — the off-season —
+  simply has no screen.
+* **Sample schedule** under the preview shows the layout without waiting for
+  real data.
 
 ---
 
@@ -1015,7 +1077,9 @@ into negative here.
 | Blocky/soft text | No BDF fonts found — the status panel shows which font each role resolved to. Point `SCOREBOARD_BDF_FONTS` at `~/rpi-rgb-led-matrix/fonts` |
 | Rotation stuck on one game | It is locked. The status panel names the locked game; unlock it in **Follow one game** |
 | No league tables in the rotation | They are off by default; switch them on in the web UI. A table also needs to have been fetched — the first one appears within a minute or two of enabling |
-| A table scrolls past rows you wanted to read | Raise the seconds-per-table slider; the scroll speed is derived from how long the screen is held |
+| A table scrolls past rows you wanted to read | Raise the seconds-per-table slider; the table scrolls at one steady speed spread across however long it is held |
+| A table appears for a moment, then the previous one comes back | Fixed: every table used to share one screen key, so the rotation snapped back to the first table every two seconds |
+| No schedule screen for a favourite | Its league is switched off, it has no games left this season, or the schedule has not been fetched yet (it arrives within seconds when online). **Sample schedule** shows the layout regardless |
 | An NHL/soccer crest looks like a black blob | Fixed automatically — very dark logos are brightened until they read on an unlit panel, preserving hue. If one still looks wrong it is the source artwork; turn `show_logos` off for a text-only screen |
 | Boot update did nothing | `journalctl -u sports-scoreboard-update -b` says which no-op applied (offline, local edits, already current, or a blocked commit) |
 
@@ -1069,6 +1133,7 @@ sports-scoreboard/
 │   ├── logos.py                 download, process and cache logos
 │   ├── teams.py                 cached team catalogs for the picker
 │   ├── standings.py             cached league tables, refreshed in background
+│   ├── schedules.py             favourite teams' coming games, refreshed in background
 │   ├── httpclient.py            timeouts, retries, last-known-good cache
 │   ├── privileges.py            drop root after the matrix is up
 │   ├── paths.py                 where files live

@@ -44,7 +44,9 @@ It is **not** in version control — `config.example.json` is the template.
 | | `lock_release_minutes` | Drop the lock this many minutes after the locked game finishes. 0–1440, default 30. `0` = keep it until you clear it. |
 | | `show_standings` | Include league tables in the rotation. |
 | | `standings_leagues` | Which leagues' tables to show. Empty = the leagues in `enabled_leagues`. |
-| | `standings_seconds` | How long each table is held, 5–120 (default 20). The scroll speed follows from it. |
+| | `standings_seconds` | How long each table is held, 5–120 (default 20). A long table scrolls at one steady speed across exactly this long; a short one (an NFL division) is shown whole. |
+| | `show_schedule` | A screen per favourite team listing its next games. Default on. |
+| | `schedule_games` | How many games that screen lists, 1–10 (default 4). More than four scroll. |
 | `sleep` | `enabled`, `start`, `end` | Blank the panels overnight. The window may cross midnight. |
 | `polling` | `favorite_live_seconds` | Poll interval when a favourite is playing. |
 | | `live_seconds` | Poll interval when any game is live or about to start. |
