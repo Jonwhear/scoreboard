@@ -448,3 +448,55 @@ def test_your_teams_division_comes_first(nfl_divisions):
     assert titles[0] == "NFC North"
     assert titles[1:] == ["AFC East", "AFC North", "AFC South", "AFC West",
                           "NFC East", "NFC South", "NFC West"]
+
+
+
+# -- headers ---------------------------------------------------------------
+
+LONG_NAMES = {
+    "efl_championship": "English League Championship",
+    "epl": "English Premier League",
+    "mls": "Major League Soccer",
+    "ncaam": "NCAA Men's Basketball Division I",
+    "nfl": "NFC North",
+}
+
+
+@pytest.mark.parametrize("chain", [1, 2, 3])
+@pytest.mark.parametrize("league", sorted(LONG_NAMES))
+def test_a_table_title_never_runs_into_the_league_tag(fonts, league, chain):
+    """The Championship's title used to be drawn straight over a 16-letter
+    "EFL_CHAMPIONSHIP" tag, garbling both."""
+    width = 64 * chain
+    tiny = fonts.get("tiny")
+    text, tag = layouts.table_heading(fonts, width, LONG_NAMES[league], league)
+    used = 2 + tiny.text_width(text) + (tiny.text_width(tag) + 4 if tag else 0)
+    assert used <= width - 2, (text, tag)
+    assert "_" not in text + (tag or ""), "the raw league id is never shown"
+
+
+def test_the_championship_reads_naturally_on_two_panels(fonts):
+    text, tag = layouts.table_heading(fonts, 128, "English League Championship",
+                                      "efl_championship")
+    assert (text, tag) == ("EFL Championship", None)
+    text, tag = layouts.table_heading(fonts, 192, "English League Championship",
+                                      "efl_championship")
+    assert (text, tag) == ("English League Championship", "EFLC")
+
+
+def test_a_short_title_keeps_its_tag(fonts):
+    assert layouts.table_heading(fonts, 128, "NFC North", "nfl") == ("NFC North", "NFL")
+
+
+def test_the_idle_screen_tags_leagues_by_short_name():
+    assert layouts.league_tag("efl_championship") == "EFLC"
+    assert layouts.league_tag("nfl") == "NFL"
+
+
+@pytest.mark.parametrize("note,color", [
+    ("Promotion", (70, 130, 255)),
+    ("Promotion Playoffs", (0, 200, 110)),
+    ("Relegation", (235, 60, 60)),
+])
+def test_promotion_places_are_marked(note, color):
+    assert zone_color(note) == color

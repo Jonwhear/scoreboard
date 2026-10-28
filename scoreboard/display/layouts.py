@@ -27,9 +27,10 @@ from typing import Optional, Sequence, Tuple
 
 from PIL import Image, ImageDraw
 
+from ..leagues import get_league
 from ..models import Game, GameState, GameTeam, StandingsGroup, TeamSchedule
 from ..rotation import Layout, ScreenItem
-from .fonts import Font, FontRegistry
+from .fonts import Font, FontRegistry, to_ascii
 
 log = logging.getLogger(__name__)
 
@@ -203,6 +204,13 @@ def final_text(game: Game) -> str:
     if "OT" in detail or "OVERTIME" in detail:
         return "FINAL/OT"
     return "FINAL"
+
+
+def league_tag(league_id: str) -> str:
+    """The league as the panel shows it, e.g. ``EFLC`` -- never the raw id,
+    which for the Championship is a 16-character ``EFL_CHAMPIONSHIP``."""
+    league = get_league(league_id)
+    return league.short_name if league is not None else league_id.upper()
 
 
 def _clock_text(game: Game) -> str:
@@ -807,9 +815,9 @@ def _draw_idle_game(
 
     # The league is useful context once the idle screen stops being
     # favourites-only, and there is room for it on the header line.
-    league_tag = game.league.upper()
-    if tiny.text_width(league_tag) + tiny.text_width(header) + 4 <= available:
-        tiny.draw_right(draw, right, 1, league_tag, DIM)
+    tag = league_tag(game.league)
+    if tiny.text_width(tag) + tiny.text_width(header) + 4 <= available:
+        tiny.draw_right(draw, right, 1, tag, DIM)
 
     matchup = f"{game.away.label} @ {game.home.label}"
     matchup_font = fit_font(fonts, ("medium", "small", "tiny"), matchup, available)
@@ -856,6 +864,9 @@ ZONE_COLORS = (
     (("europa league", "europa conference", "uefa"), (255, 140, 0)),
     (("relegation", "relegated"), (235, 60, 60)),
     (("playoff", "clinched", "wild card", "division"), (0, 200, 110)),
+    # After "playoff", so "Promotion Playoffs" stays green and only the
+    # automatic places -- the EFL's top two -- get the promotion colour.
+    (("promotion", "promoted"), (70, 130, 255)),
 )
 
 
@@ -908,7 +919,7 @@ def render_standings(
     """
     canvas = new_canvas(context.width, context.height)
     draw = ImageDraw.Draw(canvas)
-    _draw_table_header(draw, context, title or group.name or group.league.upper(),
+    _draw_table_header(draw, context, title or group.name or league_tag(group.league),
                        group.league)
     if fits_as_columns(group, context.width):
         _draw_division_columns(canvas, draw, context, group)
@@ -944,11 +955,36 @@ def fits_as_columns(group: StandingsGroup, width: int) -> bool:
     return 2 <= len(group.rows) <= width // DIVISION_COLUMN_MIN
 
 
+def table_heading(fonts: FontRegistry, width: int, heading: str,
+                  league_id: str) -> Tuple[str, Optional[str]]:
+    """What a table's header says: ``(title, tag or None)``.
+
+    The two never share pixels. If the title will not fit beside the tag,
+    the league's own name is used instead -- "English League Championship"
+    becomes "EFL Championship" -- and the tag, which would only repeat it,
+    is dropped. Only as a last resort is the title cut short.
+    """
+    tiny = fonts.get("tiny")
+    league = get_league(league_id)
+    tag = league_tag(league_id)
+    full = width - 4
+    beside_tag = full - tiny.text_width(tag) - 6
+    if tiny.text_width(heading) <= beside_tag:
+        return to_ascii(heading), tag
+    own_names = [league.name, league.short_name] if league is not None else []
+    for name in own_names:
+        if tiny.text_width(name) <= full:
+            return name, None
+    return tiny.fit(heading, beside_tag), tag
+
+
 def _draw_table_header(draw: ImageDraw.ImageDraw, context: RenderContext,
-                       heading: str, league: str) -> None:
+                       heading: str, league_id: str) -> None:
     tiny = context.fonts.get("tiny")
-    tiny.draw(draw, (2, 0), tiny.fit(heading, context.width - 26), BRIGHT)
-    tiny.draw_right(draw, context.width - 2, 0, league.upper(), DIM)
+    text, tag = table_heading(context.fonts, context.width, heading, league_id)
+    tiny.draw(draw, (2, 0), text, BRIGHT)
+    if tag:
+        tiny.draw_right(draw, context.width - 2, 0, tag, DIM)
     _hline(draw, 0, context.width - 1, TABLE_HEADER_HEIGHT - 1, FAINT)
 
 

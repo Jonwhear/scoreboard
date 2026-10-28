@@ -18,6 +18,7 @@ from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional, Sequence
 
 from ..httpclient import FetchError, HttpClient
+from ..leagues import get_league
 from ..models import (Game, GameState, GameTeam, LeagueSnapshot, Standings,
                       StandingsGroup, StandingsRow, TeamInfo, normalize_color)
 from .base import ProviderError, SportsProvider
@@ -262,7 +263,8 @@ class EspnProvider(SportsProvider):
         entries = _dig(node, "standings", "entries", default=[])
         name = _as_str(_dig(node, "name")) or _as_str(_dig(node, "abbreviation"))
         if not name and depth == 0:
-            name = league_id.upper()
+            league = get_league(league_id)
+            name = league.name if league is not None else league_id.upper()
         group = self._parse_standings_group(league_id, name, entries)
         if group.rows:
             groups.append(group)

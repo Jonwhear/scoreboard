@@ -315,11 +315,18 @@ def _standings_screens(standings: Optional[Dict[str, object]], config) -> List[S
         for group in groups:
             screens.append(ScreenItem(
                 ScreenKind.STANDINGS, Layout.STANDINGS, [],
-                title=group.name or league.upper(), detail="standings",
+                title=group.name or _league_name(league), detail="standings",
                 duration=float(rotation.standings_seconds), payload=group,
                 ref=f"{league}:{group.name}",
             ))
     return screens
+
+
+def _league_name(league_id: str) -> str:
+    from .leagues import get_league
+
+    league = get_league(league_id)
+    return league.name if league is not None else league_id.upper()
 
 
 def _grouped(
